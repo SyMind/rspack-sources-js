@@ -1,0 +1,17 @@
+[package]
+name = "rspack_sources_js"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "=3.16.0", default-features = false, features = ["napi8", "serde-json"] }
+napi-derive = "=3.7.0"
+rspack_sources = { version = "=0.103.0", default-features = false }
+serde_json = "1"
+
+[build-dependencies]
+napi-build = "=2.6.0"

@@ -1,0 +1,12 @@
+import sources = require('rspack-sources-js');
+const original: sources.Source = new sources.OriginalSource('const x = 1;', 'input.js');
+const replaced = new sources.ReplaceSource(original);
+replaced.replace(6, 6, 'y');
+const concat = new sources.ConcatSource('/* prefix */', replaced);
+const cached = new sources.CachedSource(concat);
+const result: sources.SourceAndMap = cached.sourceAndMap({ columns: true });
+const map: sources.RawSourceMap | null = result.map;
+const chunks: Buffer[] = cached.buffers();
+concat.streamChunks({}, () => {}, () => {}, () => {});
+cached.clearCache({ maps: true });
+void [map, chunks];

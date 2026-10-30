@@ -4,10 +4,35 @@
   "private": true,
   "description": "JavaScript bindings for rspack-sources, powered by Rust and Node-API.",
   "scripts": {
-    "probe:reference": "node scripts/probe-reference.cjs"
+    "probe:reference": "node scripts/probe-reference.cjs",
+    "build": "node scripts/build.cjs",
+    "build:debug": "node scripts/build.cjs --debug",
+    "test": "node --test test/*.test.cjs",
+    "test:types": "tsc -p test/types/tsconfig.json"
   },
-  "devDependencies": {
+  "packageManager": "pnpm@11.10.0",
+  "main": "lib/index.cjs",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "require": "./lib/index.cjs",
+      "import": "./lib/index.mjs"
+    }
+  },
+  "files": [
+    "lib",
+    "native/*.node",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
     "webpack-sources-reference": "npm:webpack-sources@3.6.0"
   },
-  "packageManager": "pnpm@11.10.0"
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "6.0.2"
+  }
 }
