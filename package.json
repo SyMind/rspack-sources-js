@@ -8,5 +8,6 @@
   },
   "devDependencies": {
     "webpack-sources-reference": "npm:webpack-sources@3.6.0"
-  }
+  },
+  "packageManager": "pnpm@11.10.0"
 }

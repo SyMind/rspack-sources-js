@@ -8,9 +8,11 @@ The goal is to expose source concatenation, replacement, and source map processi
 
 ## Run the reference probes
 
+Use pnpm; its version is pinned in `package.json`.
+
 ```sh
-npm ci --ignore-scripts
-npm run probe:reference
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run probe:reference
 ```
 
 The probes use the pinned `webpack-sources@3.6.0` reference. They verify reference behavior; they do not test a binding or measure performance. The npm alias `webpack-sources-reference` keeps the reference dependency separate if an application later aliases `webpack-sources` to this package.
