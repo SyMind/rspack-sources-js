@@ -3,7 +3,7 @@
 const assert = require("assert");
 const crypto = require("crypto");
 const { describe, it } = require("node:test");
-/** @typedef {import("webpack-sources-reference/lib/Source").RawSourceMap} RawSourceMap */
+/** @typedef {import("../../dist/Source").RawSourceMap} RawSourceMap */
 
 const validate = require("sourcemap-validator");
 const { ReplaceSource } = require("../..");

@@ -31,7 +31,7 @@ describe("package-entry", () => {
 
 		assert.strictEqual(
 			util.stringBufferUtils,
-			require("webpack-sources-reference/lib/helpers/stringBufferUtils"),
+			require("../../dist/helpers/stringBufferUtils"),
 		);
 		assert.strictEqual(
 			typeof util.stringBufferUtils.isDualStringBufferCachingEnabled,

@@ -1,6 +1,6 @@
 "use strict";
 
-const readMappings = require("webpack-sources-reference/lib/helpers/readMappings");
+const readMappings = require("../../../dist/helpers/readMappings");
 
 module.exports.readableMappings = (mappings, sources, names, generatedCode) => {
 	let str = "";

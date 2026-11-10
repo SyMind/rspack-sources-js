@@ -5,39 +5,44 @@
   "description": "JavaScript bindings for rspack-sources, powered by Rust and Node-API.",
   "scripts": {
     "probe:reference": "node scripts/probe-reference.cjs",
-    "build": "node scripts/build.cjs",
-    "build:debug": "node scripts/build.cjs --debug",
-    "test": "pnpm run test:local && pnpm run test:webpack-sources",
-    "test:types": "tsc -p test/types/tsconfig.json",
+    "build": "pnpm run build:js && node scripts/build.cjs",
+    "build:debug": "pnpm run build:js && node scripts/build.cjs --debug",
+    "test": "pnpm run build:js && pnpm run test:local && pnpm run test:webpack-sources",
+    "test:types": "pnpm run build:js && tsc -p test/types/tsconfig.json",
     "test:local": "node --test test/*.test.cjs",
-    "test:webpack-sources": "node --require ./test/webpack-sources/helpers/validate-mappings.js --test --test-reporter=dot \"test/webpack-sources/*.js\""
+    "test:webpack-sources": "node --require ./test/webpack-sources/helpers/validate-mappings.js --test --test-reporter=dot \"test/webpack-sources/*.js\"",
+    "build:js": "tsc -p tsconfig.json"
   },
   "packageManager": "pnpm@11.10.0",
-  "main": "lib/index.cjs",
-  "types": "lib/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "require": "./lib/index.cjs",
-      "import": "./lib/index.mjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
   },
   "files": [
-    "lib",
+    "dist",
     "native/*.node",
-    "README.md"
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "engines": {
     "node": ">=22"
-  },
-  "dependencies": {
-    "webpack-sources-reference": "npm:webpack-sources@3.6.0"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "source-map": "0.8.0",
     "sourcemap-validator": "2.1.0",
     "typescript": "6.0.2",
-    "webpack": "5.111.1"
+    "webpack": "5.111.1",
+    "webpack-sources": "3.6.0"
   }
 }

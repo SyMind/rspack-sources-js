@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      webpack-sources-reference:
-        specifier: npm:webpack-sources@3.6.0
-        version: webpack-sources@3.6.0
     devDependencies:
       '@types/node':
         specifier: 22.20.5
@@ -27,6 +23,9 @@ importers:
       webpack:
         specifier: 5.111.1
         version: 5.111.1
+      webpack-sources:
+        specifier: 3.6.0
+        version: 3.6.0
 
 packages:
 

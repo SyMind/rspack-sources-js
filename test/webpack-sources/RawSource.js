@@ -12,7 +12,7 @@ const {
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+} = require("../../dist/helpers/stringBufferUtils");
 
 const CODE_STRING =
 	"console.log('test');\nconsole.log('test2');\nconsole.log('test22');\n";

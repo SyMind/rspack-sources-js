@@ -2,10 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const ref = require('webpack-sources-reference');
-const api = require('../lib/index.cjs');
-const planner = require('../lib/planner.cjs');
-const binding = require('../lib/binding.cjs');
+const ref = require('webpack-sources');
+const api = require('../dist/index.js');
+const planner = require('../dist/planner.js');
+const binding = require('../dist/binding.js');
 
 function digest(source) {
   const hash = createHash('sha256');
@@ -215,10 +215,10 @@ test('invalid mappings never reach the Rust decoder', () => {
 });
 
 test('ESM entry and public inheritance', async () => {
-  const esm = await import('../lib/index.mjs');
+  const esm = await import('../dist/index.mjs');
   assert.strictEqual(esm.OriginalSource, api.OriginalSource);
   assert.ok(new api.OriginalSource('a','x') instanceof api.Source);
-  assert.strictEqual(api.ReplaceSource.Replacement, ref.ReplaceSource.Replacement);
+  assert.strictEqual(api.ReplaceSource.Replacement, require('../dist/ReplaceSource.js').Replacement);
 });
 
 test('map preserves ConcatSource child-array replacement after add', () => {
@@ -274,7 +274,7 @@ test('native graph lifetimes are independent across Worker teardown', async () =
   const { Worker } = require('node:worker_threads');
   const code = `
     const { parentPort } = require('node:worker_threads');
-    const api = require(${JSON.stringify(require.resolve('../lib/index.cjs'))});
+    const api = require(${JSON.stringify(require.resolve('../dist/index.js'))});
     for (let i = 0; i < 100; i++) {
       let child = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
       const parent = new api.ConcatSource('[', child, ']');

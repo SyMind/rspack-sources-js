@@ -2,9 +2,9 @@
 
 // 设计依据：验证参考实现行为，不代表原生 binding 已通过测试。
 const assert = require('node:assert/strict');
-const w = require('webpack-sources-reference');
+const w = require('webpack-sources');
 const report = {
-  reference: require('webpack-sources-reference/package.json').version,
+  reference: require('webpack-sources/package.json').version,
   node: process.version,
   platform: `${process.platform}-${process.arch}`,
 };

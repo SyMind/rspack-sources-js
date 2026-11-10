@@ -8,13 +8,13 @@ const { ConcatSource } = require("../..");
 const { OriginalSource } = require("../..");
 const { RawSource } = require("../..");
 const { Source } = require("../..");
-const streamChunks = require("webpack-sources-reference/lib/helpers/streamChunks");
+const streamChunks = require("../../dist/helpers/streamChunks");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+} = require("../../dist/helpers/stringBufferUtils");
 
 class TrackedSource extends Source {
 	constructor(source) {

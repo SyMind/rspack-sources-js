@@ -18,13 +18,13 @@ const {
 	collectSourceScopes,
 	createScopeCollector,
 	encodeScopes,
-} = require("webpack-sources-reference/lib/helpers/scopes");
+} = require("../../dist/helpers/scopes");
 
-/** @typedef {import("webpack-sources-reference/lib/Source").MapOptions} MapOptions */
-/** @typedef {import("webpack-sources-reference/lib/Source").RawSourceMap} RawSourceMap */
-/** @typedef {import("webpack-sources-reference/lib/helpers/streamChunks").ScopeBindings} ScopeBindings */
-/** @typedef {import("webpack-sources-reference/lib/Source")} Source */
-/** @typedef {import("webpack-sources-reference/lib/CachedSource").CachedData} CachedData */
+/** @typedef {import("../../dist/Source").MapOptions} MapOptions */
+/** @typedef {import("../../dist/Source").RawSourceMap} RawSourceMap */
+/** @typedef {import("../../dist/helpers/streamChunks").ScopeBindings} ScopeBindings */
+/** @typedef {import("../../dist/Source")} Source */
+/** @typedef {import("../../dist/CachedSource").CachedData} CachedData */
 
 /**
  * @param {{ map: (options?: MapOptions) => RawSourceMap | null }} source source

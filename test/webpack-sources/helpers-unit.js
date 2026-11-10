@@ -2,20 +2,20 @@
 
 const assert = require("assert");
 const { afterEach, describe, it } = require("node:test");
-const createMappingsSerializer = require("webpack-sources-reference/lib/helpers/createMappingsSerializer");
+const createMappingsSerializer = require("../../dist/helpers/createMappingsSerializer");
 const {
 	createMappingsWriter,
-} = require("webpack-sources-reference/lib/helpers/createMappingsSerializer");
+} = require("../../dist/helpers/createMappingsSerializer");
 const {
 	getMap,
 	getSourceAndMap,
-} = require("webpack-sources-reference/lib/helpers/getFromStreamChunks");
-const getGeneratedSourceInfo = require("webpack-sources-reference/lib/helpers/getGeneratedSourceInfo");
-const getSource = require("webpack-sources-reference/lib/helpers/getSource");
-const readMappings = require("webpack-sources-reference/lib/helpers/readMappings");
-const splitIntoLines = require("webpack-sources-reference/lib/helpers/splitIntoLines");
-const splitIntoPotentialTokens = require("webpack-sources-reference/lib/helpers/splitIntoPotentialTokens");
-const streamAndGetSourceAndMap = require("webpack-sources-reference/lib/helpers/streamAndGetSourceAndMap");
+} = require("../../dist/helpers/getFromStreamChunks");
+const getGeneratedSourceInfo = require("../../dist/helpers/getGeneratedSourceInfo");
+const getSource = require("../../dist/helpers/getSource");
+const readMappings = require("../../dist/helpers/readMappings");
+const splitIntoLines = require("../../dist/helpers/splitIntoLines");
+const splitIntoPotentialTokens = require("../../dist/helpers/splitIntoPotentialTokens");
+const streamAndGetSourceAndMap = require("../../dist/helpers/streamAndGetSourceAndMap");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,
@@ -23,7 +23,7 @@ const {
 	exitStringInterningRange,
 	internString,
 	isDualStringBufferCachingEnabled,
-} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+} = require("../../dist/helpers/stringBufferUtils");
 
 describe("getGeneratedSourceInfo", () => {
 	it("should return empty object when source is undefined", () => {
@@ -222,7 +222,7 @@ describe("getFromStreamChunks", () => {
 
 	it("getMap fills missing source and name indices with null", () => {
 		const map =
-			/** @type {import("webpack-sources-reference/lib/Source").RawSourceMap} */
+			/** @type {import("../../dist/Source").RawSourceMap} */
 			(getMap(makeSparseSource()));
 		assert.notStrictEqual(map, null);
 		assert.deepStrictEqual(map.sources, ["first.js", null, "third.js"]);
@@ -236,7 +236,7 @@ describe("getFromStreamChunks", () => {
 
 	it("getSourceAndMap fills missing source and name indices with null", () => {
 		const { map, source } = getSourceAndMap(makeSparseSource());
-		const m = /** @type {import("webpack-sources-reference/lib/Source").RawSourceMap} */ (map);
+		const m = /** @type {import("../../dist/Source").RawSourceMap} */ (map);
 		assert.strictEqual(source, "xy");
 		assert.notStrictEqual(m, null);
 		assert.deepStrictEqual(m.sources, ["first.js", null, "third.js"]);
@@ -289,7 +289,7 @@ describe("streamAndGetSourceAndMap", () => {
 			},
 		);
 		const { map: rawMap } = result;
-		const map = /** @type {import("webpack-sources-reference/lib/Source").RawSourceMap} */ (rawMap);
+		const map = /** @type {import("../../dist/Source").RawSourceMap} */ (rawMap);
 		assert.strictEqual(result.source, "xy");
 		assert.deepStrictEqual(map.sources, ["first.js", null, "third.js"]);
 		assert.deepStrictEqual(map.names, ["alpha", null, "gamma"]);

@@ -9,7 +9,7 @@
 // replacing the export here, before any library file is required, puts the
 // check in front of every writer.
 
-const mappingsSerializer = require("webpack-sources-reference/lib/helpers/createMappingsSerializer");
+const mappingsSerializer = require("../../../dist/helpers/createMappingsSerializer");
 
 const { createMappingsWriter } = mappingsSerializer;
 

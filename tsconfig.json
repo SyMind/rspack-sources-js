@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "rootDir": "lib",
+    "outDir": "dist",
+    "strict": true,
+    "declaration": true,
+    "noEmitOnError": true,
+    "esModuleInterop": true,
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2024"
+    ]
+  },
+  "include": [
+    "lib/**/*.ts",
+    "lib/**/*.mts"
+  ]
+}

@@ -7,7 +7,7 @@ const BatchedHash = require("webpack/lib/util/hash/BatchedHash");
 const createMd4 = require("webpack/lib/util/hash/md4");
 const createXXHash64 = require("webpack/lib/util/hash/xxhash64");
 
-/** @typedef {import("webpack-sources-reference/lib/Source").RawSourceMap} RawSourceMap */
+/** @typedef {import("../../dist/Source").RawSourceMap} RawSourceMap */
 
 const { OriginalSource } = require("../..");
 const {
@@ -15,7 +15,7 @@ const {
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+} = require("../../dist/helpers/stringBufferUtils");
 
 for (const enableMemoryOptimizations of [false, true]) {
 	describe(`originalSource (enableMemoryOptimizations: ${enableMemoryOptimizations})`, () => {

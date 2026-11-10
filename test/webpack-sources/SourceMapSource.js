@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-/** @typedef {import("webpack-sources-reference/lib/Source").RawSourceMap} RawSourceMap */
+/** @typedef {import("../../dist/Source").RawSourceMap} RawSourceMap */
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -17,13 +17,13 @@ const { ConcatSource } = require("../..");
 const { PrefixSource } = require("../..");
 const { ReplaceSource } = require("../..");
 const { CachedSource } = require("../..");
-const createMappingsSerializer = require("webpack-sources-reference/lib/helpers/createMappingsSerializer");
+const createMappingsSerializer = require("../../dist/helpers/createMappingsSerializer");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+} = require("../../dist/helpers/stringBufferUtils");
 const { withReadableMappings } = require("./helpers");
 
 for (const enableMemoryOptimizations of [false, true]) {

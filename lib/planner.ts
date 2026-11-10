@@ -1,26 +1,31 @@
-'use strict';
+import binding = require('./binding');
+import * as sources from './sources';
+import { types } from 'node:util';
+import type { MapInput, NativeEdit, NativeNode, NativeSource, NodeKind } from './nativeTypes';
+import type { MapOptions, RawSourceMap, SourceAndMap } from './Source';
+const { isProxy } = types;
 
-const binding = require('./binding.cjs');
-const reference = require('webpack-sources-reference');
-const { isProxy } = require('node:util').types;
-const snapshots = new WeakMap();
-const registered = new Map();
+interface Snapshot { key: unknown[]; deps: Snapshot[]; children: unknown[]; ref: number; handle?: NativeSource; }
+interface Description { record: Omit<NativeNode, 'children'>; key: unknown[]; children: unknown[]; }
+interface Frame { node: unknown; description?: Description; }
+const snapshots = new WeakMap<object, Snapshot>();
+const registered = new Map<object, { kind: NodeKind; methods: unknown[] }>();
 const stats = { compilations: 0, compiledNodes: 0, nativeReads: 0, fallbacks: 0 };
 const methods = ['source', 'buffer', 'size', 'map', 'sourceAndMap', 'streamChunks', '_optimize', '_sortReplacements', '_sourceMapObject', '_innerSourceMapObject'];
-const text = value => typeof value === 'string' && value.isWellFormed();
-const equal = (a, b) => a.length === b.length && a.every((item, i) => item === b[i]);
+const text = (value: unknown): value is string => typeof value === 'string' && value.isWellFormed();
+const equal = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((item, i) => item === b[i]);
 
-function register(Class, kind) {
+export function register(Class: { prototype: object }, kind: NodeKind) {
   const proto = Class.prototype;
-  registered.set(proto, { kind, methods: methods.map(name => proto[name]) });
+  registered.set(proto, { kind, methods: methods.map(name => Reflect.get(proto, name)) });
 }
 
-function classification(node) {
+function classification(node: object): NodeKind | null {
   const entry = registered.get(Object.getPrototypeOf(node));
   if (!entry) return null;
   for (let i = 0; i < methods.length; i++) {
-    let proto = node;
-    let descriptor;
+    let proto: object | null = node;
+    let descriptor: PropertyDescriptor | undefined;
     while (proto && !(descriptor = Object.getOwnPropertyDescriptor(proto, methods[i]))) proto = Object.getPrototypeOf(proto);
     if (descriptor && (!('value' in descriptor) || descriptor.value !== entry.methods[i])) return null;
     if (!descriptor && entry.methods[i] !== undefined) return null;
@@ -28,19 +33,20 @@ function classification(node) {
   return entry.kind;
 }
 
-function mapInput(value, key) {
-  if (!value || isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype) return null;
+function mapInput(input: unknown, key: unknown[]): MapInput | null {
+  if (!input || typeof input !== 'object' || isProxy(input) || Object.getPrototypeOf(input) !== Object.prototype) return null;
+  const value = input as Record<string, unknown>;
   const allowed = new Set(['version', 'mappings', 'sources', 'sourcesContent', 'names', 'file', 'sourceRoot', 'debugId', 'ignoreList']);
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Object.keys(descriptors).some(name => !allowed.has(name) || !('value' in descriptors[name]))) return null;
   if (value.version !== 3 || !text(value.mappings)) return null;
-  const result = { mappings: value.mappings };
+  const result: MapInput = { mappings: value.mappings, sources: [], sourcesContent: [], names: [] };
   key.push(value.mappings);
-  for (const [js, native] of [['sources', 'sources'], ['sourcesContent', 'sourcesContent'], ['names', 'names']]) {
+  for (const [js, native] of [['sources', 'sources'], ['sourcesContent', 'sourcesContent'], ['names', 'names']] as const) {
     const values = value[js] ?? [];
     if (!Array.isArray(values) || isProxy(values) || Object.getPrototypeOf(values) !== Array.prototype) return null;
     // Reject sparse arrays/accessors instead of running application code during graph preparation.
-    const copy = [];
+    const copy: string[] = [];
     for (let i = 0; i < values.length; i++) {
       const item = Object.getOwnPropertyDescriptor(values, i);
       if (!item || !('value' in item) || !text(item.value)) return null;
@@ -53,30 +59,33 @@ function mapInput(value, key) {
   // Rust represents missing content slots as empty strings. JS distinguishes null,
   // absent trailing slots, and empty content during composition; retain its path.
   if (result.sourcesContent.length !== result.sources.length || result.sourcesContent.some(value => value === '')) return null;
-  for (const name of ['file', 'sourceRoot', 'debugId']) {
+  for (const name of ['file', 'sourceRoot', 'debugId'] as const) {
     if (value[name] !== undefined && !text(value[name])) return null;
     key.push(name, value[name]);
-    if (value[name] !== undefined) result[name] = value[name];
+    if (value[name] !== undefined) result[name] = value[name] as string;
   }
   // Source-map extensions are preserved by the JS path until Rust parity is tested.
   if (value.ignoreList !== undefined || value.debugId !== undefined) return null;
   return result;
 }
 
-function describe(node) {
-  if (typeof node === 'string') return text(node) ? { record: { kind: 'raw', text: node }, key: [node], children: [] } : null;
-  if (!node || typeof node !== 'object' || isProxy(node)) return null;
-  const kind = classification(node);
+function describe(input: unknown): Description | null {
+  if (typeof input === 'string') return text(input) ? { record: { kind: 'raw', text: input }, key: [input], children: [] } : null;
+  if (!input || typeof input !== 'object' || isProxy(input)) return null;
+  const kind = classification(input);
   if (kind === 'raw') {
+    const node = input as sources.RawSource;
     if (!text(node._value) || node._valueAsBuffer !== undefined) return null;
     return { record: { kind, text: node._value }, key: [node._value], children: [] };
   }
   if (kind === 'original') {
+    const node = input as sources.OriginalSource;
     if (!text(node._value) || !text(node._name) || node._valueAsBuffer !== undefined || node._scopeBindings !== undefined) return null;
     return { record: { kind, text: node._value, name: node._name }, key: [node._value, node._name], children: [] };
   }
   if (kind === 'concat') {
-    // Keep the reference's observable child-array replacement and flattening boundary.
+    const node = input as sources.ConcatSource;
+    // Preserve the observable child-array replacement and flattening boundary.
     if (!node._isOptimized) node._optimize();
     const children = [];
     for (let i = 0; i < node._children.length; i++) {
@@ -87,6 +96,7 @@ function describe(node) {
     return { record: { kind }, key: [], children };
   }
   if (kind === 'replace') {
+    const node = input as sources.ReplaceSource;
     for (let i = 0; i < node._replacements.length; i++) {
       const item = Object.getOwnPropertyDescriptor(node._replacements, i);
       if (!item || !('value' in item) || !item.value || isProxy(item.value)) return null;
@@ -97,8 +107,8 @@ function describe(node) {
     }
     node._sortReplacements();
     const edits = node._replacements;
-    const key = [];
-    const converted = [];
+    const key: unknown[] = [];
+    const converted: NativeEdit[] = [];
     let previousEnd = 0;
     for (const edit of edits) {
       const { start, end, content, name } = edit;
@@ -111,16 +121,18 @@ function describe(node) {
     return { record: { kind, edits: converted }, key, children: [node._source] };
   }
   if (kind === 'mapped') {
+    const node = input as sources.SourceMapSource;
     if (!text(node._valueAsString) || !text(node._name) || node._valueAsBuffer !== undefined || node._sourceMapAsBuffer !== undefined || node._innerSourceMapAsBuffer !== undefined || node._originalSourceAsBuffer !== undefined) return null;
     const key = [node._valueAsString, node._name, node._originalSourceAsString, !!node._removeOriginalSource];
-    // Strings are parsed by the reference implementation at its normal lazy boundary.
+    // Strings are parsed by the local implementation at its normal lazy boundary.
     const outer = node._sourceMapObject();
     const sourceMap = mapInput(outer, key);
     if (!sourceMap) return null;
-    let innerSourceMap;
+    let innerSourceMap: MapInput | undefined;
     if (node._hasInnerSourceMap) {
-      innerSourceMap = mapInput(node._innerSourceMapObject(), key);
-      if (!innerSourceMap || (node._hasOriginalSource && !text(node._originalSourceAsString))) return null;
+      const inner = mapInput(node._innerSourceMapObject(), key);
+      if (!inner || (node._hasOriginalSource && !text(node._originalSourceAsString))) return null;
+      innerSourceMap = inner;
     }
     key.push(!!node._hasInnerSourceMap);
     return {
@@ -133,14 +145,14 @@ function describe(node) {
   return null;
 }
 
-function prepare(root) {
-  const memo = new Map();
-  const visiting = new Set();
-  const records = [];
-  const pending = [];
-  const existing = [];
-  const existingIds = new Map();
-  function refOf(entry) {
+export function prepare(root: unknown): NativeSource | null {
+  const memo = new Map<unknown, Snapshot>();
+  const visiting = new Set<unknown>();
+  const records: NativeNode[] = [];
+  const pending: { node: unknown; entry: Snapshot }[] = [];
+  const existing: NativeSource[] = [];
+  const existingIds = new Map<NativeSource, number>();
+  function refOf(entry: Snapshot): number {
     if (!entry.handle) return entry.ref;
     let id = existingIds.get(entry.handle);
     if (id === undefined) {
@@ -150,7 +162,7 @@ function prepare(root) {
     }
     return id;
   }
-  const stack = [{ node: root }];
+  const stack: Frame[] = [{ node: root }];
   while (stack.length) {
     const frame = stack[stack.length - 1];
     if (memo.has(frame.node)) { stack.pop(); continue; }
@@ -160,7 +172,7 @@ function prepare(root) {
       if (!description) return null;
       frame.description = description;
       visiting.add(frame.node);
-      const prior = typeof frame.node === 'object' ? snapshots.get(frame.node) : undefined;
+      const prior = frame.node && typeof frame.node === 'object' ? snapshots.get(frame.node) : undefined;
       if (prior) {
         description.children.forEach((child, i) => {
           if (typeof child === 'string' && !memo.has(child) && prior.children[i] === child) memo.set(child, prior.deps[i]);
@@ -174,9 +186,9 @@ function prepare(root) {
       continue;
     }
     const { record, key, children } = frame.description;
-    const deps = children.map(child => memo.get(child));
-    const old = typeof frame.node === 'object' ? snapshots.get(frame.node) : undefined;
-    let entry;
+    const deps = children.map(child => memo.get(child)!);
+    const old = frame.node && typeof frame.node === 'object' ? snapshots.get(frame.node) : undefined;
+    let entry: Snapshot;
     if (old && equal(old.key, key) && equal(old.deps, deps)) {
       entry = old;
     } else {
@@ -195,14 +207,16 @@ function prepare(root) {
     stats.compiledNodes += handles.length;
     pending.forEach(({ node, entry }, index) => {
       entry.handle = handles[index];
-      if (typeof node === 'object') snapshots.set(node, entry);
+      if (node && typeof node === 'object') snapshots.set(node, entry);
     });
   }
-  return memo.get(root).handle;
+  return memo.get(root)!.handle ?? null;
 }
 
-function nativeRead(node, operation, options, fallback) {
-  // Custom option getters/proxies and scopes remain in the reference path.
+export function nativeRead(node: sources.Source, operation: 'map', options: MapOptions | undefined, fallback: () => RawSourceMap | null): RawSourceMap | null;
+export function nativeRead(node: sources.Source, operation: 'sourceAndMap', options: MapOptions | undefined, fallback: () => SourceAndMap): SourceAndMap;
+export function nativeRead(node: sources.Source, operation: 'map' | 'sourceAndMap', options: MapOptions | undefined, fallback: () => RawSourceMap | null | SourceAndMap): RawSourceMap | null | SourceAndMap {
+  // Custom option getters/proxies and scopes remain in the local compatibility path.
   let columns = true;
   if (options !== undefined && options !== null) {
     if (isProxy(options) || Object.getPrototypeOf(options) !== Object.prototype) return fallback();
@@ -214,7 +228,7 @@ function nativeRead(node, operation, options, fallback) {
   const handle = prepare(node);
   if (!handle) { stats.fallbacks++; return fallback(); }
   stats.nativeReads++;
-  function normalizeMap(map) {
+  function normalizeMap(map: RawSourceMap | null): RawSourceMap | null {
     if (map === null) return null;
     return { version: 3, file: 'x', mappings: map.mappings, sources: map.sources,
       sourcesContent: map.sourcesContent, names: map.names };
@@ -224,7 +238,7 @@ function nativeRead(node, operation, options, fallback) {
   return { source: result.source, map: normalizeMap(result.map) };
 }
 
-function forget(node) { snapshots.delete(node); }
-function resetStats() { for (const key of Object.keys(stats)) stats[key] = 0; }
-for (const [Class, kind] of [[reference.RawSource, 'raw'], [reference.OriginalSource, 'original'], [reference.ConcatSource, 'concat'], [reference.ReplaceSource, 'replace'], [reference.SourceMapSource, 'mapped']]) register(Class, kind);
-module.exports = { register, nativeRead, forget, prepare, stats, resetStats };
+export function forget(node: object) { snapshots.delete(node); }
+export function resetStats() { for (const key of Object.keys(stats) as (keyof typeof stats)[]) stats[key] = 0; }
+for (const [Class, kind] of [[sources.RawSource, 'raw'], [sources.OriginalSource, 'original'], [sources.ConcatSource, 'concat'], [sources.ReplaceSource, 'replace'], [sources.SourceMapSource, 'mapped']] as const) register(Class, kind);
+export { stats };
