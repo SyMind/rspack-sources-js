@@ -7,8 +7,10 @@
     "probe:reference": "node scripts/probe-reference.cjs",
     "build": "node scripts/build.cjs",
     "build:debug": "node scripts/build.cjs --debug",
-    "test": "node --test test/*.test.cjs",
-    "test:types": "tsc -p test/types/tsconfig.json"
+    "test": "pnpm run test:local && pnpm run test:webpack-sources",
+    "test:types": "tsc -p test/types/tsconfig.json",
+    "test:local": "node --test test/*.test.cjs",
+    "test:webpack-sources": "node --require ./test/webpack-sources/helpers/validate-mappings.js --test --test-reporter=dot \"test/webpack-sources/*.js\""
   },
   "packageManager": "pnpm@11.10.0",
   "main": "lib/index.cjs",
@@ -33,6 +35,9 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
-    "typescript": "6.0.2"
+    "source-map": "0.8.0",
+    "sourcemap-validator": "2.1.0",
+    "typescript": "6.0.2",
+    "webpack": "5.111.1"
   }
 }

@@ -1,0 +1,536 @@
+"use strict";
+
+const assert = require("assert");
+/** @typedef {import("webpack-sources-reference/lib/Source").RawSourceMap} RawSourceMap */
+
+const crypto = require("crypto");
+const fs = require("fs");
+const { afterEach, beforeEach, describe, it } = require("node:test");
+const path = require("path");
+const { SourceNode } = require("source-map");
+const BatchedHash = require("webpack/lib/util/hash/BatchedHash");
+const createMd4 = require("webpack/lib/util/hash/md4");
+const createXXHash64 = require("webpack/lib/util/hash/xxhash64");
+const { SourceMapSource } = require("../..");
+const { OriginalSource } = require("../..");
+const { ConcatSource } = require("../..");
+const { PrefixSource } = require("../..");
+const { ReplaceSource } = require("../..");
+const { CachedSource } = require("../..");
+const createMappingsSerializer = require("webpack-sources-reference/lib/helpers/createMappingsSerializer");
+const {
+	disableDualStringBufferCaching,
+	enableDualStringBufferCaching,
+	enterStringInterningRange,
+	exitStringInterningRange,
+} = require("webpack-sources-reference/lib/helpers/stringBufferUtils");
+const { withReadableMappings } = require("./helpers");
+
+for (const enableMemoryOptimizations of [false, true]) {
+	describe(`sourceMapSource (enableMemoryOptimizations: ${enableMemoryOptimizations})`, () => {
+		beforeEach(() => {
+			if (enableMemoryOptimizations) {
+				disableDualStringBufferCaching();
+				enterStringInterningRange();
+			}
+		});
+
+		afterEach(() => {
+			if (enableMemoryOptimizations) {
+				enableDualStringBufferCaching();
+				exitStringInterningRange();
+			}
+		});
+
+		it("map correctly", (t) => {
+			const innerSourceCode = `${["Hello World", "is a test string"].join(
+				"\n",
+			)}\n`;
+			const innerSource = new ConcatSource(
+				new OriginalSource(innerSourceCode, "hello-world.txt"),
+				new OriginalSource("Translate: ", "header.txt"),
+				"Other text",
+			);
+
+			const source = new SourceNode(null, null, null, [
+				"Translated: ",
+				new SourceNode(1, 0, "text", "Hallo", "Hello"),
+				" ",
+				new SourceNode(1, 6, "text", "Welt\n", "World"),
+				new SourceNode(2, 0, "text", "ist ein", "nope"),
+				" test ",
+				new SourceNode(2, 10, "text", "Text\n"),
+				new SourceNode(3, 11, "text", "Anderer"),
+				" ",
+				new SourceNode(3, 17, "text", "Text"),
+			]);
+			source.setSourceContent("text", innerSourceCode);
+
+			const sourceR = source.toStringWithSourceMap({
+				file: "translated.txt",
+			});
+
+			const sourceMapSource1 = new SourceMapSource(
+				sourceR.code,
+				"text",
+				sourceR.map.toJSON(),
+				innerSource.source(),
+				/** @type {RawSourceMap} */
+				(innerSource.map()),
+			);
+			const sourceMapSource2 = new SourceMapSource(
+				sourceR.code,
+				"text",
+				sourceR.map.toJSON(),
+				innerSource.source(),
+				/** @type {RawSourceMap} */
+				(innerSource.map()),
+				true,
+			);
+
+			const expectedContent = [
+				"Translated: Hallo Welt",
+				"ist ein test Text",
+				"Anderer Text",
+			].join("\n");
+			assert.deepStrictEqual(sourceMapSource1.source(), expectedContent);
+			assert.deepStrictEqual(sourceMapSource2.source(), expectedContent);
+
+			t.assert.snapshot(withReadableMappings(sourceMapSource1.map()));
+
+			t.assert.snapshot(withReadableMappings(sourceMapSource2.map()));
+
+			const hash = require("crypto").createHash("sha256");
+
+			sourceMapSource1.updateHash(hash);
+			const digest = hash.digest("hex");
+			t.assert.snapshot(digest);
+
+			const clone = new SourceMapSource(...sourceMapSource1.getArgsAsBuffers());
+			assert.deepStrictEqual(
+				clone.sourceAndMap(),
+				sourceMapSource1.sourceAndMap(),
+			);
+
+			const hash2 = require("crypto").createHash("sha256");
+
+			clone.updateHash(hash2);
+			const digest2 = hash2.digest("hex");
+			assert.deepStrictEqual(digest2, digest);
+		});
+
+		it("should handle null sources and sourcesContent", (t) => {
+			const a = new SourceMapSource("hello world\n", "hello.txt", {
+				version: 3,
+				// @ts-expect-error for tests
+				sources: [null],
+				// @ts-expect-error for tests
+				sourcesContent: [null],
+				mappings: "AAAA",
+			});
+			const b = new SourceMapSource("hello world\n", "hello.txt", {
+				version: 3,
+				sources: [],
+				sourcesContent: [],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			});
+			const c = new SourceMapSource("hello world\n", "hello.txt", {
+				version: 3,
+				sources: ["hello-source.txt"],
+				sourcesContent: ["hello world\n"],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			});
+			const sources = [a, b, c].map((s) => {
+				const r = new ReplaceSource(s);
+				r.replace(1, 4, "i");
+				return r;
+			});
+			const source = new ConcatSource(...sources);
+
+			t.assert.snapshot(source.source());
+			t.assert.snapshot(withReadableMappings(source.map(), source.source()));
+			t.assert.snapshot(
+				withReadableMappings(source.map({ columns: false }), source.source()),
+			);
+		});
+
+		it("should handle null innerSourceMap", (t) => {
+			const sourceWithNull = new SourceMapSource(
+				"h",
+				"hello.txt",
+				{
+					version: 3,
+					sources: ["hello.txt"],
+					mappings: "AAAAA",
+					names: ["hello"],
+					file: "",
+				},
+				"hello",
+				null,
+				false,
+			);
+			const nullMap = withReadableMappings(sourceWithNull.map());
+			t.assert.snapshot(nullMap);
+			const sourceWithUndefined = new SourceMapSource(
+				"h",
+				"hello.txt",
+				{
+					version: 3,
+					sources: ["hello.txt"],
+					mappings: "AAAAA",
+					names: ["hello"],
+					file: "",
+				},
+				"hello",
+				undefined,
+				false,
+			);
+			const undefinedMap = withReadableMappings(sourceWithUndefined.map());
+			t.assert.snapshot(undefinedMap);
+
+			assert.deepStrictEqual(nullMap, undefinedMap);
+		});
+
+		it("should handle es6-promise correctly", () => {
+			const code = fs.readFileSync(
+				path.resolve(__dirname, "fixtures", "es6-promise.js"),
+				"utf8",
+			);
+			const map = JSON.parse(
+				fs.readFileSync(
+					path.resolve(__dirname, "fixtures", "es6-promise.map"),
+					"utf8",
+				),
+			);
+			const inner = new SourceMapSource(code, "es6-promise.js", map);
+			const source = new ConcatSource(inner, inner);
+			assert.strictEqual(source.source(), code + code);
+			assert.strictEqual(source.sourceAndMap().source, code + code);
+		});
+
+		it("should not emit zero sizes mappings when ending with empty mapping", (t) => {
+			const a = new SourceMapSource("hello\n", "a", {
+				version: 3,
+				mappings: "AAAA;AACA",
+				sources: ["hello1"],
+				names: [],
+				file: "",
+			});
+			const b = new SourceMapSource("hi", "b", {
+				version: 3,
+				mappings: "AAAA,EAAE",
+				sources: ["hello2"],
+				names: [],
+				file: "",
+			});
+			const b2 = new SourceMapSource("hi", "b", {
+				version: 3,
+				mappings: "AAAA,EAAE",
+				sources: ["hello3"],
+				names: [],
+				file: "",
+			});
+			const c = new SourceMapSource("", "c", {
+				version: 3,
+				mappings: "AAAA",
+				sources: ["hello4"],
+				names: [],
+				file: "",
+			});
+			const source = new ConcatSource(
+				a,
+				a,
+				b,
+				b,
+				b2,
+				b,
+				c,
+				c,
+				b2,
+				a,
+				b2,
+				c,
+				a,
+				b,
+			);
+			source.sourceAndMap();
+			t.assert.snapshot(withReadableMappings(source.map(), source.source()));
+			source.sourceAndMap({ columns: true });
+			source.map({ columns: true });
+			const withReplacements = (s) => {
+				const r = new ReplaceSource(s);
+				r.insert(0, "");
+				return r;
+			};
+			withReplacements(source).sourceAndMap();
+			withReplacements(source).map();
+			withReplacements(source).sourceAndMap({ columns: false });
+			withReplacements(source).map({ columns: false });
+			const withPrefix = (s) => new PrefixSource("test", s);
+			withPrefix(source).sourceAndMap();
+			withPrefix(source).map();
+			withPrefix(source).sourceAndMap({ columns: false });
+			withPrefix(source).map({ columns: false });
+			const testCached = (s, fn) => {
+				const c = new CachedSource(s);
+				const o = fn(s);
+				const a = fn(c);
+				assert.deepStrictEqual(a, o);
+				const b = fn(c);
+				assert.deepStrictEqual(b, o);
+				return b;
+			};
+			testCached(source, (s) => s.sourceAndMap());
+			testCached(source, (s) => s.map());
+			testCached(source, (s) => s.sourceAndMap({ columns: false }));
+			testCached(source, (s) => s.map({ columns: false }));
+			testCached(withPrefix(source), (s) => s.sourceAndMap());
+			testCached(withPrefix(source), (s) => s.map());
+			testCached(withPrefix(source), (s) => s.sourceAndMap({ columns: false }));
+			testCached(withPrefix(source), (s) => s.map({ columns: false }));
+			testCached(source, (s) => withPrefix(s).sourceAndMap());
+			testCached(source, (s) => withPrefix(s).map());
+			testCached(source, (s) => withPrefix(s).sourceAndMap({ columns: false }));
+			testCached(source, (s) => withPrefix(s).map({ columns: false }));
+		});
+
+		it("should not crash without original source when mapping names", (t) => {
+			const source = new SourceMapSource(
+				"h",
+				"hello.txt",
+				{
+					version: 3,
+					sources: ["hello.txt"],
+					mappings: "AAAAA",
+					names: ["hello"],
+					file: "",
+				},
+				"hello",
+				{
+					version: 3,
+					sources: ["hello world.txt"],
+					mappings: "AAAA",
+					names: [],
+					file: "",
+				},
+				false,
+			);
+			t.assert.snapshot(withReadableMappings(source.map()));
+		});
+
+		it("should map generated lines to the inner source", (t) => {
+			const m = createMappingsSerializer();
+			const m2 = createMappingsSerializer();
+			const source = new SourceMapSource(
+				"Message: H W!",
+				"HELLO_WORLD.txt",
+				{
+					version: 3,
+					sources: ["messages.txt", "HELLO_WORLD.txt"],
+					mappings: [
+						m(1, 0, 0, 1, 0, 0),
+						m(1, 9, 1, 1, 0, 1),
+						m(1, 11, 1, 1, 6, 2),
+						m(1, 12, -1, -1, -1, -1),
+					].join(""),
+					names: ["Message", "hello", "world"],
+					file: "",
+				},
+				"HELLO WORLD",
+				{
+					version: 3,
+					sources: ["hello world.txt"],
+					mappings: [m2(1, 0, 0, 1, 0, 0), m2(1, 6, -1, -1, -1, -1)].join(""),
+					sourcesContent: ["hello world"],
+					names: [],
+					file: "",
+				},
+				false,
+			);
+			t.assert.snapshot(withReadableMappings(source.sourceAndMap()));
+		});
+
+		it("provides buffer when backed by string", () => {
+			const sourceMapSource = new SourceMapSource("source", "name");
+
+			const buffer1 = sourceMapSource.buffer();
+			assert.strictEqual(buffer1.length, 6);
+
+			const buffer2 = sourceMapSource.buffer();
+
+			// When memory optimizations are enabled, the buffer is not cached.
+			assert.strictEqual(
+				enableMemoryOptimizations ? buffer1.equals(buffer2) : buffer2,
+				enableMemoryOptimizations ? true : buffer1,
+			);
+		});
+
+		it("provides buffer when backed by buffer", () => {
+			const sourceMapSource = new SourceMapSource(
+				Buffer.from("source", "utf8"),
+				"name",
+			);
+
+			const buffer1 = sourceMapSource.buffer();
+			assert.strictEqual(buffer1.length, 6);
+
+			const buffer2 = sourceMapSource.buffer();
+			assert.strictEqual(buffer2, buffer1);
+		});
+
+		it("should expose buffers() returning a single-entry Buffer[]", () => {
+			const sourceMapSource = new SourceMapSource("source", "name");
+			const buffers = sourceMapSource.buffers();
+			assert.strictEqual(Array.isArray(buffers), true);
+			assert.strictEqual(buffers.length, 1);
+			assert.deepStrictEqual(buffers[0], Buffer.from("source"));
+			assert.deepStrictEqual(Buffer.concat(buffers), sourceMapSource.buffer());
+		});
+
+		it("should reuse the underlying buffer in buffers() when constructed from a Buffer", () => {
+			const buffer = Buffer.from("source", "utf8");
+			const sourceMapSource = new SourceMapSource(buffer, "name");
+			const buffers = sourceMapSource.buffers();
+			assert.strictEqual(buffers.length, 1);
+			assert.strictEqual(buffers[0], buffer);
+		});
+
+		it("should accept source map as string", () => {
+			const mapObj = {
+				version: 3,
+				sources: ["hello-source.txt"],
+				sourcesContent: ["hello world\n"],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			};
+			const source = new SourceMapSource(
+				"hello world\n",
+				"hello.txt",
+				JSON.stringify(mapObj),
+			);
+			assert.strictEqual(source.source(), "hello world\n");
+			const map = source.map();
+			assert.deepStrictEqual(map, { ...mapObj });
+			// call again to hit the cached string path in _sourceMapString
+			source.updateHash({
+				// @ts-expect-error for tests
+				update() {},
+			});
+		});
+
+		it("should accept inner source map as string", () => {
+			const outerMap = {
+				version: 3,
+				sources: ["hello.txt"],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			};
+			const innerMap = {
+				version: 3,
+				sources: ["hello-world.txt"],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			};
+			const source = new SourceMapSource(
+				"hello world\n",
+				"hello.txt",
+				outerMap,
+				"hello world\n",
+				JSON.stringify(innerMap),
+			);
+			// exercise _innerSourceMapBuffer via updateHash, then map() which
+			// calls _innerSourceMapObject which uses _innerSourceMapString - the string was already provided
+			source.updateHash({
+				// @ts-expect-error for tests
+				update() {},
+			});
+			// also call map which will trigger _innerSourceMapObject (reads string)
+			assert.notStrictEqual(source.map(), null);
+		});
+
+		it("should include remove original source flag in the hash", () => {
+			const outerMap = {
+				version: 3,
+				sources: ["hello.txt"],
+				mappings: "AAAA",
+				names: [],
+				file: "",
+			};
+			const sourceA = new SourceMapSource(
+				"hello\n",
+				"hello.txt",
+				outerMap,
+				"hello\n",
+				null,
+				false,
+			);
+			const sourceB = new SourceMapSource(
+				"hello\n",
+				"hello.txt",
+				outerMap,
+				"hello\n",
+				null,
+				true,
+			);
+
+			const hashA = crypto.createHash("md5");
+			sourceA.updateHash(hashA);
+			const digestA = hashA.digest("hex");
+
+			const hashB = crypto.createHash("md5");
+			sourceB.updateHash(hashB);
+			const digestB = hashB.digest("hex");
+
+			assert.notStrictEqual(digestA, digestB);
+		});
+
+		for (const hash of [
+			["md5", [crypto.createHash("md5"), crypto.createHash("md5")]],
+			["md4", [new BatchedHash(createMd4()), new BatchedHash(createMd4())]],
+			[
+				"xxhash64",
+				[new BatchedHash(createXXHash64()), new BatchedHash(createXXHash64())],
+			],
+		]) {
+			it(`should have the same hash (${hash[0]}) for string and Buffer`, () => {
+				const sourceString = new SourceMapSource("hello world\n", "hello.txt", {
+					version: 3,
+					sources: ["hello-source.txt"],
+					sourcesContent: ["hello world\n"],
+					mappings: "AAAA",
+					names: [],
+					file: "",
+				});
+				const sourceBuffer = new SourceMapSource(
+					Buffer.from("hello world\n"),
+					"hello.txt",
+					Buffer.from(
+						JSON.stringify({
+							version: 3,
+							sources: ["hello-source.txt"],
+							sourcesContent: ["hello world\n"],
+							mappings: "AAAA",
+							names: [],
+							file: "",
+						}),
+					),
+				);
+
+				assert.strictEqual(sourceString.source(), "hello world\n");
+				assert.deepStrictEqual(sourceString.buffer(), sourceBuffer.buffer());
+
+				sourceString.updateHash(hash[1][0]);
+				sourceBuffer.updateHash(hash[1][1]);
+
+				assert.strictEqual(hash[1][0].digest("hex"), hash[1][1].digest("hex"));
+			});
+		}
+	});
+}

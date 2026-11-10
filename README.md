@@ -56,6 +56,8 @@ Replacement ranges are translated from UTF-16 indices to Rust byte offsets. Isol
 
 The tests compare strings, buffers, sizes, exact maps and serialization, hashes, streaming events, mutations, caches, CJS/ESM imports, and Worker lifetimes. Native-path assertions prevent supported fixtures from passing solely through fallback. `pnpm probe:reference` runs the separate reference-behavior probes.
 
+`pnpm test` runs both the local regression tests (`pnpm test:local`) and the complete test suite from `webpack-sources@3.6.0` (`pnpm test:webpack-sources`). The upstream suite includes all 15 test files, four original snapshots, fixtures, mapping validation, helper tests, scopes, cache behavior, and Source combinations up to four layers. Source classes load through this package; helper tests exercise the JS helpers supplied by the pinned reference dependency. Migration provenance and import adaptations are recorded in [test/webpack-sources/UPSTREAM.md](test/webpack-sources/UPSTREAM.md).
+
 This version prioritizes a working ownership model and compatible results. Graph validation still traverses reachable nodes; JS inputs and Rust snapshots can coexist in memory. Native `sourceAndMap()` currently performs separate source and map traversals. Native allocation accounting, performance measurement, Linux/Windows validation, and platform-package distribution remain future work. Fewer boundary calls alone are not evidence of a speedup.
 
 `pnpm pack` includes the locally built binary for the current platform. It does not create a portable, multi-platform distribution.
