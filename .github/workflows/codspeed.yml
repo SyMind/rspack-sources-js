@@ -1,0 +1,53 @@
+name: CodSpeed
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: codspeed-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sources:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm build
+      - name: Check API and benchmark correctness
+        run: |
+          pnpm test
+          pnpm test:types
+          pnpm bench:test
+          pnpm bench:validate:ci
+      - name: Measure both implementations
+        uses: CodSpeedHQ/action@v5
+        with:
+          mode: simulation
+          runner-version: 5.3.1
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: pnpm bench:ci
+      - name: Preserve replay validation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-replay-validation
+          path: .bench/*validation*.json
+          if-no-files-found: ignore

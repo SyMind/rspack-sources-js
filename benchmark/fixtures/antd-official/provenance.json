@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/ant-design/ant-design-examples",
+  "commit": "447d77affd96d7e0d841683cdc4314f6fc22d71c",
+  "example": "examples/rsbuild-normal",
+  "sourceHash": "b1f45b86a848cfd103f5efe57208964e087b9a4e90742b92161a32e53182c8ca",
+  "sourceFiles": {
+    "App.tsx": "b1f45b86a848cfd103f5efe57208964e087b9a4e90742b92161a32e53182c8ca",
+    "env.d.ts": "a1bbdd24c11ea91b8f781d1c7e5128e6423f7a46d03d30d15ec4057ea437cf06",
+    "index.tsx": "b78cac1f681d9eae4668c5d309f458be783e31973891b03c6193e79cc57ca45b"
+  },
+  "appLockSha256": "7052cf74ccefe39c6abf805a6ba186a28d414f2bd00fc34d2b7e1b3e6757ff90",
+  "sourceChanges": [],
+  "buildAdapter": "fixed webpack 5.111.1 replaces Rsbuild; application source is unchanged",
+  "dependencies": {
+    "antd": "5.19.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "capturePlatform": "darwin-arm64",
+  "captureNode": "v22.22.3"
+}

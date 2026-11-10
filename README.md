@@ -61,3 +61,19 @@ The tests compare strings, buffers, sizes, exact maps and serialization, hashes,
 This version prioritizes a working ownership model and compatible results. Graph validation still traverses reachable nodes; JS inputs and Rust snapshots can coexist in memory. Native `sourceAndMap()` currently performs separate source and map traversals. Native allocation accounting, performance measurement, Linux/Windows validation, and platform-package distribution remain future work. Fewer boundary calls alone are not evidence of a speedup.
 
 `pnpm pack` includes the locally built binary for the current platform. It does not create a portable, multi-platform distribution.
+
+## Benchmarks from an official Ant Design example
+
+The benchmark captures actual webpack builds of the Button/DatePicker application from the pinned official `ant-design-examples` repository. It replays the observed Source graphs, replacement ranges, buffers, caches, API calls, and options against both implementations. The application source is unchanged; a fixed webpack adapter replaces the example's original Rsbuild configuration.
+
+```sh
+pnpm bench:test
+pnpm bench:validate
+pnpm bench:list
+pnpm bench:simulation --implementation=webpack --valid-only
+pnpm bench:simulation --implementation=rspack --valid-only
+```
+
+Validation currently reproduces all 20 captured upstream operations; this implementation matches 19. The remaining production JavaScript map differs, so validation fails and measurements require an explicit `--valid-only` exclusion on both sides. Measurements cover individual observed operations with graph rehydration excluded. They do not establish end-to-end build speedups. See the [capture and replay design](benchmark/DESIGN.md) and [CodSpeed results](benchmark/RESULTS.md) for commands, provenance, execution paths, and measurement limits.
+
+The [CodSpeed workflow](.github/workflows/codspeed.yml) builds and tests on Linux, then records both implementations with distinct benchmark names in one simulation report. CI verifies the exact known mismatch with `pnpm bench:validate:ci`; any new or changed failure stops the job. Fixed cases automatically return to the measured set. Public repository uploads use GitHub OIDC; `CODSPEED_TOKEN` is optional. The repository must be enabled in CodSpeed for uploads.

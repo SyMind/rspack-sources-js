@@ -1,0 +1,77 @@
+{
+  "provenance": {
+    "repository": "https://github.com/ant-design/ant-design-examples",
+    "commit": "447d77affd96d7e0d841683cdc4314f6fc22d71c",
+    "example": "examples/rsbuild-normal",
+    "sourceHash": "b1f45b86a848cfd103f5efe57208964e087b9a4e90742b92161a32e53182c8ca",
+    "sourceFiles": {
+      "App.tsx": "b1f45b86a848cfd103f5efe57208964e087b9a4e90742b92161a32e53182c8ca",
+      "env.d.ts": "a1bbdd24c11ea91b8f781d1c7e5128e6423f7a46d03d30d15ec4057ea437cf06",
+      "index.tsx": "b78cac1f681d9eae4668c5d309f458be783e31973891b03c6193e79cc57ca45b"
+    },
+    "appLockSha256": "7052cf74ccefe39c6abf805a6ba186a28d414f2bd00fc34d2b7e1b3e6757ff90",
+    "sourceChanges": [],
+    "buildAdapter": "fixed webpack 5.111.1 replaces Rsbuild; application source is unchanged",
+    "dependencies": {
+      "antd": "5.19.2",
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    },
+    "capturePlatform": "darwin-arm64",
+    "captureNode": "v22.22.3"
+  },
+  "webpack": "5.111.1",
+  "webpackSources": "3.6.0",
+  "builds": {
+    "development": {
+      "control": {
+        "files": {
+          "app.css": "04b54676e1f3879efd04abb7631ae2394f448c89f7bf49cacd8b38c52afd4e5b",
+          "app.css.map": "232fb2458db26e4749cf168fdf1ca720845b20aef3563771fb5163437df0ecdd",
+          "app.js": "652a56b8640329c7f14c8f08f515f9352186cbd2b18d5dea3e90a1f71c0908ce",
+          "app.js.map": "f7b7cd540b329bebfce18d4842e476d285dd11bac1467735c69b473638a60020"
+        },
+        "compilationHash": "cbe7bacd215b114f",
+        "modules": 442,
+        "timeMs": 781
+      },
+      "captured": {
+        "files": {
+          "app.css": "04b54676e1f3879efd04abb7631ae2394f448c89f7bf49cacd8b38c52afd4e5b",
+          "app.css.map": "232fb2458db26e4749cf168fdf1ca720845b20aef3563771fb5163437df0ecdd",
+          "app.js": "652a56b8640329c7f14c8f08f515f9352186cbd2b18d5dea3e90a1f71c0908ce",
+          "app.js.map": "f7b7cd540b329bebfce18d4842e476d285dd11bac1467735c69b473638a60020"
+        },
+        "compilationHash": "cbe7bacd215b114f",
+        "modules": 442,
+        "timeMs": 625
+      },
+      "identicalAssets": true
+    },
+    "production": {
+      "control": {
+        "files": {
+          "app.css": "670c42f6a0c2fda58e844058f416610d207e65e8421c566fb43b3c6369a56a53",
+          "app.css.map": "99f9fdc56dcb348ad7f9fed26901e70eea184aac309a5bedcc85194a54135e4a",
+          "app.js": "c9324fa4a098aebb558dc4886589c2635f4ff968137f7ac36978a123a03300ea",
+          "app.js.map": "1a52a9b403a5c65da7bc86f7e0f7a96dd3f576d710f3c346d3ebe1dcc52f9b93"
+        },
+        "compilationHash": "752acab4a807713d",
+        "modules": 441,
+        "timeMs": 3343
+      },
+      "captured": {
+        "files": {
+          "app.css": "670c42f6a0c2fda58e844058f416610d207e65e8421c566fb43b3c6369a56a53",
+          "app.css.map": "99f9fdc56dcb348ad7f9fed26901e70eea184aac309a5bedcc85194a54135e4a",
+          "app.js": "c9324fa4a098aebb558dc4886589c2635f4ff968137f7ac36978a123a03300ea",
+          "app.js.map": "1a52a9b403a5c65da7bc86f7e0f7a96dd3f576d710f3c346d3ebe1dcc52f9b93"
+        },
+        "compilationHash": "752acab4a807713d",
+        "modules": 441,
+        "timeMs": 3141
+      },
+      "identicalAssets": true
+    }
+  }
+}

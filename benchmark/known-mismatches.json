@@ -1,0 +1,9 @@
+[
+  {
+    "id": "production/devtool/ConcatSource/sourceAndMap",
+    "error": "implementation-output-mismatch",
+    "expected": "de207885f282fce6904d6f48ed8d456e2cfaa72a3941381d53267ff8f508af4b",
+    "actualResult": "7b1538d93059cfacde203f427697fe89584864302f2b50df9a7ce5fdee501a96",
+    "reason": "生产 app.js 的 source 相同，map.mappings 少 54 个字符；不测量输出不一致的实现。"
+  }
+]

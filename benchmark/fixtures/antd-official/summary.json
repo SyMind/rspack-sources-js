@@ -1,0 +1,376 @@
+[
+  {
+    "mode": "development",
+    "outerCalls": 871,
+    "nestedCalls": 6198,
+    "unsupported": {},
+    "cases": [
+      {
+        "id": "development/modules/SourceMapSource/source",
+        "asset": null,
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 6,
+        "codeUnits": 1127,
+        "bufferBytes": 0,
+        "types": {
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/modules/SourceMapSource/updateHash",
+        "asset": null,
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 6,
+        "codeUnits": 1127,
+        "bufferBytes": 0,
+        "types": {
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/modules/OriginalSource/source",
+        "asset": null,
+        "observedCalls": 430,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 2,
+        "codeUnits": 1029712,
+        "bufferBytes": 0,
+        "types": {
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/modules/OriginalSource/updateHash",
+        "asset": null,
+        "observedCalls": 430,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 2,
+        "codeUnits": 1029712,
+        "bufferBytes": 0,
+        "types": {
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/render/CachedSource/source",
+        "asset": null,
+        "observedCalls": 1,
+        "options": [],
+        "sources": 3,
+        "edges": 2,
+        "sharedSources": 0,
+        "strings": 2,
+        "codeUnits": 3836,
+        "bufferBytes": 0,
+        "types": {
+          "CachedSource": 1,
+          "ReplaceSource": 1,
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/devtool/CachedSource/sourceAndMap",
+        "asset": "app.js",
+        "observedCalls": 2,
+        "options": [
+          {
+            "module": true,
+            "columns": true
+          }
+        ],
+        "sources": 3704,
+        "edges": 3703,
+        "sharedSources": 0,
+        "strings": 11960,
+        "codeUnits": 3271779,
+        "bufferBytes": 1954,
+        "types": {
+          "CachedSource": 1236,
+          "ConcatSource": 1219,
+          "RawSource": 412,
+          "ReplaceSource": 412,
+          "SourceMapSource": 2,
+          "OriginalSource": 420,
+          "PrefixSource": 3
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/emit/ConcatSource/buffer",
+        "asset": "app.js",
+        "observedCalls": 2,
+        "options": [],
+        "sources": 2,
+        "edges": 1,
+        "sharedSources": 0,
+        "strings": 3,
+        "codeUnits": 5819810,
+        "bufferBytes": 0,
+        "types": {
+          "ConcatSource": 1,
+          "RawSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "development/emit/RawSource/buffer",
+        "asset": "app.js.map",
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 0,
+        "codeUnits": 0,
+        "bufferBytes": 2825393,
+        "types": {
+          "RawSource": 1
+        },
+        "cacheFields": 0
+      }
+    ]
+  },
+  {
+    "mode": "production",
+    "outerCalls": 1295,
+    "nestedCalls": 3860,
+    "unsupported": {},
+    "cases": [
+      {
+        "id": "production/modules/SourceMapSource/source",
+        "asset": null,
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 6,
+        "codeUnits": 1127,
+        "bufferBytes": 0,
+        "types": {
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/modules/SourceMapSource/updateHash",
+        "asset": null,
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 6,
+        "codeUnits": 1127,
+        "bufferBytes": 0,
+        "types": {
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/modules/OriginalSource/source",
+        "asset": null,
+        "observedCalls": 430,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 2,
+        "codeUnits": 131800,
+        "bufferBytes": 0,
+        "types": {
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/modules/OriginalSource/updateHash",
+        "asset": null,
+        "observedCalls": 430,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 2,
+        "codeUnits": 131800,
+        "bufferBytes": 0,
+        "types": {
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/modules/CachedSource/source",
+        "asset": null,
+        "observedCalls": 408,
+        "options": [],
+        "sources": 3,
+        "edges": 2,
+        "sharedSources": 0,
+        "strings": 18,
+        "codeUnits": 263995,
+        "bufferBytes": 0,
+        "types": {
+          "CachedSource": 1,
+          "ReplaceSource": 1,
+          "OriginalSource": 1
+        },
+        "cacheFields": 1
+      },
+      {
+        "id": "production/render/CachedSource/source",
+        "asset": null,
+        "observedCalls": 9,
+        "options": [],
+        "sources": 5,
+        "edges": 4,
+        "sharedSources": 0,
+        "strings": 6,
+        "codeUnits": 7280,
+        "bufferBytes": 0,
+        "types": {
+          "CachedSource": 2,
+          "ConcatSource": 1,
+          "ReplaceSource": 1,
+          "OriginalSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/optimize/CachedSource/sourceAndMap",
+        "asset": "app.js",
+        "observedCalls": 2,
+        "options": [],
+        "sources": 1689,
+        "edges": 1688,
+        "sharedSources": 0,
+        "strings": 11438,
+        "codeUnits": 3071082,
+        "bufferBytes": 1954,
+        "types": {
+          "CachedSource": 415,
+          "ConcatSource": 33,
+          "ReplaceSource": 802,
+          "OriginalSource": 412,
+          "PrefixSource": 3,
+          "RawSource": 22,
+          "SourceMapSource": 2
+        },
+        "cacheFields": 405
+      },
+      {
+        "id": "production/devtool/ConcatSource/sourceAndMap",
+        "asset": "app.js",
+        "observedCalls": 1,
+        "options": [
+          {
+            "module": true,
+            "columns": true
+          }
+        ],
+        "sources": 2,
+        "edges": 1,
+        "sharedSources": 0,
+        "strings": 7319,
+        "codeUnits": 5287162,
+        "bufferBytes": 0,
+        "types": {
+          "ConcatSource": 1,
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/devtool/SourceMapSource/sourceAndMap",
+        "asset": "app.css",
+        "observedCalls": 1,
+        "options": [
+          {
+            "module": true,
+            "columns": true
+          }
+        ],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 11,
+        "codeUnits": 15930,
+        "bufferBytes": 0,
+        "types": {
+          "SourceMapSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/hash/CachedSource/source",
+        "asset": null,
+        "observedCalls": 5,
+        "options": [],
+        "sources": 2,
+        "edges": 1,
+        "sharedSources": 0,
+        "strings": 0,
+        "codeUnits": 0,
+        "bufferBytes": 2061501,
+        "types": {
+          "CachedSource": 1,
+          "RawSource": 1
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/emit/ConcatSource/buffer",
+        "asset": "app.js",
+        "observedCalls": 2,
+        "options": [],
+        "sources": 3,
+        "edges": 2,
+        "sharedSources": 0,
+        "strings": 4,
+        "codeUnits": 1010768,
+        "bufferBytes": 0,
+        "types": {
+          "ConcatSource": 1,
+          "RawSource": 2
+        },
+        "cacheFields": 0
+      },
+      {
+        "id": "production/emit/RawSource/buffer",
+        "asset": "app.js.map",
+        "observedCalls": 3,
+        "options": [],
+        "sources": 1,
+        "edges": 0,
+        "sharedSources": 0,
+        "strings": 0,
+        "codeUnits": 0,
+        "bufferBytes": 2061501,
+        "types": {
+          "RawSource": 1
+        },
+        "cacheFields": 0
+      }
+    ]
+  }
+]

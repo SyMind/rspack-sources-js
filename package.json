@@ -11,7 +11,18 @@
     "test:types": "pnpm run build:js && tsc -p test/types/tsconfig.json",
     "test:local": "node --test test/*.test.cjs",
     "test:webpack-sources": "node --require ./test/webpack-sources/helpers/validate-mappings.js --test --test-reporter=dot \"test/webpack-sources/*.js\"",
-    "build:js": "tsc -p tsconfig.json"
+    "build:js": "tsc -p tsconfig.json",
+    "bench:validate": "pnpm run build:js && node benchmark/replay.mjs",
+    "bench:validate:ci": "pnpm run build:js && node benchmark/replay.mjs --ci",
+    "bench:list": "node benchmark/run.mjs --list",
+    "bench:simulation": "codspeed run --mode simulation -- node --disable-wasm-trap-handler --max-old-space-size=4096 --hash-seed=1 --random-seed=1 --no-opt --predictable --predictable-gc-schedule --interpreted-frames-native-stack --allow-natives-syntax --expose-gc --no-concurrent-sweeping benchmark/run.mjs",
+    "bench:ci": "node --disable-wasm-trap-handler --max-old-space-size=4096 --hash-seed=1 --random-seed=1 --no-opt --predictable --predictable-gc-schedule --interpreted-frames-native-stack --allow-natives-syntax --expose-gc --no-concurrent-sweeping benchmark/run.mjs --implementation=both --ci",
+    "bench:walltime": "codspeed run --mode walltime -- node --hash-seed=1 --random-seed=1 --interpreted-frames-native-stack --allow-natives-syntax --expose-gc benchmark/run.mjs",
+    "bench:prepare-linux": "node benchmark/prepare-linux.mjs",
+    "bench:prepare-app": "node benchmark/prepare-app.mjs",
+    "bench:capture": "node benchmark/capture.mjs",
+    "bench:analyze": "node benchmark/analyze.mjs",
+    "bench:test": "node --test benchmark/*.test.*"
   },
   "packageManager": "pnpm@11.10.0",
   "main": "dist/index.js",
@@ -38,9 +49,12 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@codspeed/core": "5.7.1",
+    "@codspeed/tinybench-plugin": "5.7.1",
     "@types/node": "22.20.5",
     "source-map": "0.8.0",
     "sourcemap-validator": "2.1.0",
+    "tinybench": "5.1.0",
     "typescript": "6.0.2",
     "webpack": "5.111.1",
     "webpack-sources": "3.6.0"
