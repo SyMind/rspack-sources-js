@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/binding"]
+exclude = ["crates/rspack_sources"]
 resolver = "3"
 
 [profile.release]

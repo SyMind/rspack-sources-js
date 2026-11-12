@@ -51,7 +51,7 @@ function encodeGraph(root, api) {
   return { root: reference, records, summary };
 }
 
-function restoreGraph(graph, api) {
+function restoreGraph(graph, api, nativeState) {
   const memo = new Map(), constructing = new Set();
   function decode(value) {
     if (value === null || typeof value !== 'object') return value;
@@ -77,16 +77,25 @@ function restoreGraph(graph, api) {
       else switch (record.kind) {
         case 'Source': result = new api.Source(); break;
         case 'RawSource': result = new api.RawSource(fields._value ?? fields._valueAsString ?? fields._valueAsBuffer); break;
-        case 'OriginalSource': result = new api.OriginalSource(fields._value ?? fields._valueAsBuffer, fields._name, fields._scopeBindings); break;
+        case 'OriginalSource':
+          result = nativeState ? nativeState.restoreOriginal(api, fields) : new api.OriginalSource(fields._value ?? fields._valueAsBuffer, fields._name);
+          break;
         case 'SourceMapSource': result = new api.SourceMapSource(
           fields._valueAsString ?? fields._valueAsBuffer, fields._name,
           fields._sourceMapAsObject ?? fields._sourceMapAsString ?? fields._sourceMapAsBuffer,
           fields._hasOriginalSource ? fields._originalSourceAsString ?? fields._originalSourceAsBuffer : undefined,
           fields._hasInnerSourceMap ? fields._innerSourceMapAsObject ?? fields._innerSourceMapAsString ?? fields._innerSourceMapAsBuffer : undefined,
           fields._removeOriginalSource); break;
-        case 'ConcatSource': result = new api.ConcatSource(...fields._children); break;
+        case 'ConcatSource':
+          if (nativeState && fields._isOptimized) {
+            result = new api.ConcatSource();
+            result.addAllSkipOptimizing(fields._children);
+          } else result = new api.ConcatSource(...fields._children);
+          break;
         case 'ReplaceSource': result = new api.ReplaceSource(fields._source, fields._name); break;
-        case 'CachedSource': result = new api.CachedSource(fields._source); break;
+        case 'CachedSource':
+          result = nativeState ? nativeState.restoreCached(api, fields) : new api.CachedSource(fields._source);
+          break;
         case 'PrefixSource': result = new api.PrefixSource(fields._prefix, fields._source); break;
         case 'SizeOnlySource': result = new api.SizeOnlySource(fields._size); break;
         case 'CompatSource': result = new api.CompatSource(fields._sourceLike); break;
@@ -95,12 +104,15 @@ function restoreGraph(graph, api) {
       constructing.delete(id);
       // Retain observed caches and storage representation, including absent fields.
       const names = new Set(record.properties.map(([name]) => name));
-      for (const name of Object.getOwnPropertyNames(result)) if (!names.has(name)) delete result[name];
+      if (!nativeState) for (const name of Object.getOwnPropertyNames(result)) if (!names.has(name)) delete result[name];
     }
     memo.set(id, result);
     for (const [name, item, enumerable, writable, configurable] of record.properties ?? []) {
+      if (nativeState && (record.kind === 'OriginalSource' || record.kind === 'CachedSource') && name.startsWith('_')) continue;
+      if (nativeState && record.kind === 'ConcatSource' && (name === '_children' || name === '_isOptimized')) continue;
       const value = decode(item);
-      if (record.type === 'array' && String(result.length) === name && enumerable && writable && configurable) result.push(value);
+      if (nativeState && record.type === 'source' && name.startsWith('_')) nativeState.set(result, name, value);
+      else if (record.type === 'array' && String(result.length) === name && enumerable && writable && configurable) result.push(value);
       else if (name !== '__proto__' && enumerable && writable && configurable) result[name] = value;
       else Object.defineProperty(result, name, { value, enumerable, writable, configurable });
     }
@@ -119,11 +131,4 @@ function normalize(value) {
   return value;
 }
 function fingerprint(value) { return createHash('sha256').update(JSON.stringify(normalize(value))).digest('hex'); }
-function streamFingerprint() {
-  const hash = createHash('sha256'); let events = 0;
-  return {
-    callbacks: ['chunk', 'source', 'name'].map(kind => (...args) => { events++; hash.update(JSON.stringify(normalize([kind, ...args])) + '\n'); }),
-    finish(result) { hash.update(JSON.stringify(normalize(result))); return { digest: hash.digest('hex'), events }; },
-  };
-}
-module.exports = { encodeGraph, restoreGraph, fingerprint, streamFingerprint, UnsupportedGraph };
+module.exports = { encodeGraph, restoreGraph, fingerprint, UnsupportedGraph };

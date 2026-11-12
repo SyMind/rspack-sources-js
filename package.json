@@ -22,7 +22,9 @@
     "bench:prepare-app": "node benchmark/prepare-app.mjs",
     "bench:capture": "node benchmark/capture.mjs",
     "bench:analyze": "node benchmark/analyze.mjs",
-    "bench:test": "node --test benchmark/*.test.*"
+    "bench:test": "node --test benchmark/*.test.*",
+    "bench:raw:simulation": "codspeed run --mode simulation -- node --disable-wasm-trap-handler --max-old-space-size=4096 --hash-seed=1 --random-seed=1 --no-opt --predictable --predictable-gc-schedule --interpreted-frames-native-stack --allow-natives-syntax --expose-gc --no-concurrent-sweeping benchmark/raw-constructor.mjs",
+    "bench:raw:walltime": "codspeed run --mode walltime -- node --hash-seed=1 --random-seed=1 --interpreted-frames-native-stack --allow-natives-syntax --expose-gc benchmark/raw-constructor.mjs"
   },
   "packageManager": "pnpm@11.10.0",
   "main": "dist/index.js",

@@ -1,5 +1,7 @@
 "use strict";
 
+const { read: readInternal } = require("../native-internals.cjs");
+
 const assert = require("assert");
 const crypto = require("crypto");
 const { describe, it } = require("node:test");
@@ -129,7 +131,11 @@ describe("clearCache", () => {
 	it("concatSource recursively clears children", () => {
 		const a = new TrackedSource(new OriginalSource("A", "a.js"));
 		const b = new TrackedSource(new OriginalSource("B", "b.js"));
-		const concat = new ConcatSource(a, "literal-string", b);
+		const concat = new ConcatSource(
+			Object.assign(new CompatSource(a), { clearCache: a.clearCache.bind(a) }),
+			"literal-string",
+			Object.assign(new CompatSource(b), { clearCache: b.clearCache.bind(b) }),
+		);
 
 		concat.clearCache();
 		assert.strictEqual(a.calls.clearCache, 1);
@@ -178,9 +184,9 @@ describe("clearCache", () => {
 		const internal = /** @type {{ _valueAsBuffer?: Buffer }} */ (
 			/** @type {unknown} */ (raw)
 		);
-		assert.notStrictEqual(internal._valueAsBuffer, undefined);
+		assert.notStrictEqual(readInternal(internal, "_valueAsBuffer"), undefined);
 		raw.clearCache();
-		assert.strictEqual(internal._valueAsBuffer, undefined);
+		assert.strictEqual(readInternal(internal, "_valueAsBuffer"), undefined);
 		// Data is preserved via the primary string form.
 		assert.strictEqual(raw.source(), "hello");
 		assert.strictEqual(raw.buffer().toString("utf8"), "hello");
@@ -310,14 +316,13 @@ describe("clearCache", () => {
 	it("default clearCache preserves the cached hash payload", () => {
 		const inner = new OriginalSource("body", "f.js");
 		const cached = new CachedSource(inner);
-		cached.updateHash(crypto.createHash("md5"));
-		const internal = /** @type {{ _cachedHashUpdate?: unknown[] }} */ (
-			/** @type {unknown} */ (cached)
-		);
-		const before = internal._cachedHashUpdate;
-		assert.notStrictEqual(before, undefined);
+		const before = crypto.createHash("md5");
+		cached.updateHash(before);
+		inner.updateHash = () => assert.fail("recomputed a cached hash");
 		cached.clearCache();
-		assert.strictEqual(internal._cachedHashUpdate, before);
+		const after = crypto.createHash("md5");
+		cached.updateHash(after);
+		assert.strictEqual(after.digest("hex"), before.digest("hex"));
 	});
 
 	it("default clearCache keeps the cached byte size", () => {
@@ -326,21 +331,23 @@ describe("clearCache", () => {
 		const internal = /** @type {{ _cachedSize?: number }} */ (
 			/** @type {unknown} */ (cached)
 		);
-		assert.strictEqual(internal._cachedSize, 5);
+		assert.strictEqual(readInternal(internal, "_cachedSize"), 5);
 		cached.clearCache();
-		assert.strictEqual(internal._cachedSize, 5);
+		assert.strictEqual(readInternal(internal, "_cachedSize"), 5);
 	});
 
-	it("cachedSource reuses the `_cachedMaps` Map instead of reallocating", () => {
-		const cached = new CachedSource(new OriginalSource("body", "f.js"));
+	it("cachedSource reuses the map cache supplied to the constructor", () => {
+		const maps = new Map();
+		const cached = new CachedSource(new OriginalSource("body", "f.js"), {
+			buffer: Buffer.from("body"),
+			maps,
+		});
 		cached.map();
-		const internal = /** @type {{ _cachedMaps: Map<string, unknown> }} */ (
-			/** @type {unknown} */ (cached)
-		);
-		const before = internal._cachedMaps;
+		assert.strictEqual(maps.size, 1);
 		cached.clearCache();
-		assert.strictEqual(internal._cachedMaps, before);
-		assert.strictEqual(internal._cachedMaps.size, 0);
+		assert.strictEqual(maps.size, 0);
+		cached.map();
+		assert.strictEqual(maps.size, 1);
 	});
 
 	it("`{ parsedMap: true }` drops the parsed object form when a buffer survives", () => {
@@ -358,10 +365,10 @@ describe("clearCache", () => {
 			/** @type {{ _sourceMapAsObject?: { mappings: string }, _sourceMapAsBuffer?: Buffer }} */ (
 				/** @type {unknown} */ (source)
 			);
-		assert.notStrictEqual(internal._sourceMapAsObject, undefined);
-		assert.notStrictEqual(internal._sourceMapAsBuffer, undefined);
+		assert.notStrictEqual(readInternal(internal, "_sourceMapAsObject"), undefined);
+		assert.notStrictEqual(readInternal(internal, "_sourceMapAsBuffer"), undefined);
 		source.clearCache({ parsedMap: true });
-		assert.strictEqual(internal._sourceMapAsObject, undefined);
+		assert.strictEqual(readInternal(internal, "_sourceMapAsObject"), undefined);
 		// map() rehydrates from the buffer — value preserved.
 		const map = /** @type {{ mappings: string }} */ (source.map());
 		assert.strictEqual(map.mappings, "AAAA");
@@ -381,10 +388,10 @@ describe("clearCache", () => {
 			/** @type {{ _sourceMapAsObject?: { mappings: string } }} */ (
 				/** @type {unknown} */ (source)
 			);
-		const before = internal._sourceMapAsObject;
+		const before = readInternal(internal, "_sourceMapAsObject");
 		assert.notStrictEqual(before, undefined);
 		source.clearCache();
-		assert.strictEqual(internal._sourceMapAsObject, before);
+		assert.strictEqual(readInternal(internal, "_sourceMapAsObject"), before);
 	});
 
 	it("`{ parsedMap: true }` is a no-op when no serialized form survives", () => {
@@ -402,10 +409,10 @@ describe("clearCache", () => {
 			/** @type {{ _sourceMapAsObject?: { mappings: string } }} */ (
 				/** @type {unknown} */ (source)
 			);
-		const before = internal._sourceMapAsObject;
+		const before = readInternal(internal, "_sourceMapAsObject");
 		assert.notStrictEqual(before, undefined);
 		source.clearCache({ parsedMap: true });
-		assert.strictEqual(internal._sourceMapAsObject, before);
+		assert.strictEqual(readInternal(internal, "_sourceMapAsObject"), before);
 	});
 
 	it("getCachedData() after clearCache() rehydrates buffer and preserves CachedData contract", () => {

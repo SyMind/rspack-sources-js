@@ -42,6 +42,6 @@ CodSpeed 对 development/modules/SourceMapSource/source 提示 dominated by syst
 
 20/20 上游回放匹配真实构建指纹；当前实现 19/20。失败的是 `production/devtool/ConcatSource/sourceAndMap`：输出 source 完全相同，但 map.mappings 长度 662,078 → 662,024，首次差异位于偏移 10,128。该图有 ConcatSource + SourceMapSource，走原生路径；其性能数字不进入任何对照结果。
 
-当前证据说明：主要真实大图仍回退，唯一通过校验的 CSS 原生场景较慢，生产 JS 还有一处精确映射不一致。若继续优化，应先定位映射差异并补足真实图覆盖，再重跑相同 fixtures；当前没有整次 webpack build 加速、内存或 RSS 结论。完整调用、缓存状态、类型分布、重建命令及边界见 [DESIGN.md](DESIGN.md)。
+当前证据说明：主要真实大图仍回退，唯一通过校验的 CSS 原生场景较慢，生产 JS 还有一处精确映射不一致。若继续优化，应先定位映射差异并补足真实图覆盖，再重跑相同 fixtures；当前没有整次 webpack build 加速、内存或 RSS 结论。
 
 所有报告借用本机既有可访问的 web-infra-dev/rspack CodSpeed 项目保存，不代表代码已发布。未提交、未推送 benchmark 或生产改动。

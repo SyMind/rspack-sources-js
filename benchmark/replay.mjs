@@ -3,12 +3,13 @@ import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { restoreGraph, fingerprint, streamFingerprint } from './graph.cjs';
+import { restoreGraph, fingerprint } from './graph.cjs';
 import { verifyReport } from './verification.mjs';
 
 const require = createRequire(import.meta.url);
 export const reference = require('webpack-sources');
 export const implementation = require('../dist/index.js');
+export const nativeState = require('./native-state.cjs');
 export const planner = require('../dist/planner.js');
 const createHash = require('webpack').util.createHash;
 export const fixtureDirectory = fileURLToPath(new URL('./fixtures/antd-official/', import.meta.url));
@@ -19,7 +20,7 @@ export function loadCases({ filter = '', mode } = {}) {
     const capture = JSON.parse(gunzipSync(readFileSync(join(fixtureDirectory, name))));
     if (capture.schema !== 1 || capture.webpackSources !== require('webpack-sources/package.json').version) throw new Error('Capture version differs from replay reference');
     if (mode && capture.mode !== mode) continue;
-    records.push(...capture.cases.filter(item => item.id.includes(filter)));
+    records.push(...capture.cases.filter(item => item.method !== 'streamChunks' && item.id.includes(filter)));
   }
   if (!records.length) throw new Error(`No captured calls match ${JSON.stringify({ filter, mode })}`);
   return records;
@@ -31,13 +32,6 @@ export function replay(record, source, { verify = false } = {}) {
     const hash = createHash(record.hashAlgorithm);
     source.updateHash(hash);
     return hash.digest('hex');
-  }
-  if (record.method === 'streamChunks') {
-    if (verify) {
-      const trace = streamFingerprint();
-      return trace.finish(source.streamChunks(args[0], ...trace.callbacks));
-    }
-    return source.streamChunks(args[0], () => {}, () => {}, () => {});
   }
   const result = source[record.method](...args);
   return verify ? fingerprint(result) : result;
@@ -52,7 +46,7 @@ export function validateCases(records) {
       const graph = restoreGraph(record.graph, reference);
       referenceResult = replay(record, graph, { verify: true });
       if (JSON.stringify(referenceResult) !== JSON.stringify(record.expected)) error = 'reference-replay-mismatch';
-      const source = restoreGraph(record.graph, implementation);
+      const source = restoreGraph(record.graph, implementation, nativeState);
       actualResult = replay(record, source, { verify: true });
       if (!error && JSON.stringify(actualResult) !== JSON.stringify(referenceResult)) error = 'implementation-output-mismatch';
     } catch (cause) { error = `${cause.name}: ${cause.message}`; }

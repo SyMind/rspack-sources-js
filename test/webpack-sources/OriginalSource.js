@@ -124,11 +124,10 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.strictEqual(source.sourceAndMap().source, content);
 		});
 
-		it("should map correctly when constructed from a Buffer (streamChunks path)", () => {
+		it("should map correctly when constructed from a Buffer", () => {
 			const content = "Line1\nLine2\n";
 			const source = new OriginalSource(Buffer.from(content), "file.js");
-			// Calling map() without calling source() first to ensure streamChunks
-			// populates _value from the buffer
+			// Map the Buffer before the first source() call.
 			assert.notStrictEqual(source.map({ columns: false }), null);
 		});
 
@@ -168,19 +167,24 @@ for (const enableMemoryOptimizations of [false, true]) {
 			);
 		});
 
-		it("does not cache a buffer when hashing a string-backed source", () => {
+		it("passes the content Buffer to the hash and respects dual caching", () => {
 			const source = new OriginalSource("Text", "file.js");
-			const internal = /** @type {{ _valueAsBuffer?: Buffer }} */ (
-				/** @type {unknown} */ (source)
+			const updates = [];
+			source.updateHash({
+				update(value) {
+					updates.push(value);
+					return this;
+				},
+			});
+			assert.deepStrictEqual(updates, ["OriginalSource", Buffer.from("Text"), "file.js"]);
+			assert.strictEqual(
+				source.buffer() === updates[1],
+				!enableMemoryOptimizations,
 			);
-
-			source.updateHash(crypto.createHash("md5"));
-
-			assert.strictEqual(internal._valueAsBuffer, undefined);
 		});
 
 		for (const text of ["Text", "\u00FC\u00EF \u2603 \uD83D\uDE80"]) {
-			it(`hashes a string without materializing its buffer (${JSON.stringify(
+			it(`hashes the UTF-8 bytes of a string (${JSON.stringify(
 				text,
 			)})`, () => {
 				const source = new OriginalSource(text, "file.js");

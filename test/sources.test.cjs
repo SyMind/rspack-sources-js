@@ -12,14 +12,6 @@ function digest(source) {
   source.updateHash(hash);
   return hash.digest('hex');
 }
-function stream(source, options) {
-  const events = [];
-  const result = source.streamChunks(options,
-    (...args) => events.push(['chunk', ...args]),
-    (...args) => events.push(['source', ...args]),
-    (...args) => events.push(['name', ...args]));
-  return { events, result };
-}
 function compare(build, { native = true } = {}) {
   for (const options of [undefined, {}, { columns: true }, { columns: false }]) {
     const a = build(api), b = build(ref);
@@ -33,12 +25,6 @@ function compare(build, { native = true } = {}) {
     assert.equal(a.size(), b.size());
     assert.equal(digest(a), digest(b));
     assert.deepStrictEqual(a.buffers(), b.buffers());
-    for (const flags of [{}, { finalSource: true }, { source: false, finalSource: true }]) {
-      planner.resetStats();
-      assert.deepStrictEqual(stream(a, { ...options, ...flags }), stream(b, { ...options, ...flags }));
-      assert.equal(planner.stats.nativeReads, 0, 'streamChunks stays entirely in JS');
-      assert.equal(planner.stats.compilations, 0, 'streamChunks does not compile native graphs');
-    }
   }
 }
 
@@ -75,10 +61,11 @@ test('snapshot reuse and child mutation rebuild only affected nodes', () => {
   assert.equal(old.source(), '[abc]', 'returned Buffer does not alias Rust data');
 });
 
-test('no native calls while accumulating edits; one compilation batch on read', () => {
+test('edits enter Rust immediately; snapshot refresh is coalesced on read', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('a'.repeat(1000), 'in.js'));
   planner.resetStats();
   for (let i = 0; i < 1000; i++) r.replace(i, i, 'b');
+  assert.equal(planner.stats.mutations, 1000);
   assert.equal(planner.stats.compilations, 0);
   assert.equal(r.sourceAndMap().source, 'b'.repeat(1000));
   assert.equal(planner.stats.compilations, 1);
@@ -88,7 +75,7 @@ test('shared DAG children are compiled once', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('x', 'x.js'));
   const a = new api.ConcatSource(r, r, r);
   planner.resetStats(); a.map();
-  assert.equal(planner.stats.compiledNodes, 3);
+  assert.equal(planner.stats.compiledNodes, 1, 'children were already constructed by their constructors');
   r.insert(0, 'a');
   assert.equal(a.sourceAndMap().source, 'axaxax');
 });
@@ -98,14 +85,17 @@ test('nested ConcatSource captures children when flattened', () => {
   a.add('b'); assert.equal(b.sourceAndMap().source, 'a');
 });
 
-test('exposed child array and replacement objects invalidate snapshots', () => {
+test('replacement edits invalidate snapshots and children array edits stay local', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
   r.replace(0, 0, 'x');
   const p = new api.ConcatSource(r);
   assert.equal(p.sourceAndMap().source, 'xbc');
   r.getReplacements()[0].content = 'y';
   assert.equal(p.sourceAndMap().source, 'ybc');
-  p.getChildren().push(new api.OriginalSource('!', 'end'));
+  const end = new api.OriginalSource('!', 'end');
+  p.getChildren().push(end);
+  assert.equal(p.sourceAndMap().source, 'ybc');
+  p.add(end);
   assert.equal(p.sourceAndMap().source, 'ybc!');
 });
 
@@ -133,8 +123,23 @@ test('CachedSource lazy and cachedData interchange', () => {
 });
 
 for (const value of ['\ud800', 'A\ude00B']) {
-  test('isolated surrogate JS fallback ' + JSON.stringify(value), () => compare(w => new w.OriginalSource(value, 'x'), { native: false }));
+  test('OriginalSource maps isolated surrogates in Rust ' + JSON.stringify(value), () => compare(w => new w.OriginalSource(value, 'x')));
 }
+test('OriginalSource maps Buffer and UTF-16 inputs in Rust', () => {
+  const name = 'input\udc00.js';
+  for (const value of [Buffer.from('a; b\n'), 'x\ud800; 😀\n', '']) {
+    const source = new api.OriginalSource(value, name);
+    const reference = new ref.OriginalSource(value, name);
+    if (Buffer.isBuffer(value)) value[0] = 0xff;
+    planner.resetStats();
+    assert.deepEqual(source.map({ get columns() { return true; } }), reference.map());
+    if (Buffer.isBuffer(value)) value.fill(0);
+    assert.deepEqual(source.sourceAndMap({ columns: false }), reference.sourceAndMap({ columns: false }));
+    assert.equal(planner.stats.nativeReads, 2);
+    assert.equal(planner.stats.fallbacks, 0);
+  }
+});
+
 for (const [start, end] of [[1, 1], [-1, 0], [0.5, 1], [50, 70], [2, 0]]) {
   test(`unsupported edit fallback ${start}:${end}`, () => compare(w => {
     const r = new w.ReplaceSource(new w.OriginalSource('A😀B', 'x')); r.replace(start, end, 'X'); return r;
@@ -145,6 +150,38 @@ test('overlapping edits and insert after replacement use JS semantics', () => co
   const r = new w.ReplaceSource(new w.OriginalSource('abcdef', 'x'));
   r.replace(0, 3, 'x');r.replace(2, 4, 'y');return r;
 }, { native: false }));
+
+test('OriginalSource hash exposes a writable Buffer independent of its UTF-8 snapshot', () => {
+  const text = 'a中😀';
+  const source = new api.OriginalSource(text, 'input.js');
+  const snapshot = planner.prepare(source);
+  const chunks = [];
+  source.updateHash({ update(value) { chunks.push(value); return this; } });
+  assert.deepStrictEqual(chunks, ['OriginalSource', Buffer.from(text), 'input.js']);
+  assert.strictEqual(source.buffer(), chunks[1]);
+
+  chunks[1][0] = 98;
+  assert.equal(snapshot.source(), text);
+  assert.equal(source.source(), text);
+  assert.equal(source.sourceAndMap().source, text);
+  assert.equal(source.buffer().toString(), 'b中😀');
+});
+
+test('RawSource and SourceMapSource hash Buffers do not alias prepared snapshots', () => {
+  const text = 'abc😀';
+  const map = { version: 3, sources: ['in.js'], sourcesContent: [text], names: [], mappings: 'AAAA' };
+  for (const source of [new api.RawSource(text), new api.SourceMapSource(text, 'in.js', map)]) {
+    const snapshot = planner.prepare(source);
+    const chunks = [];
+    source.updateHash({ update(value) { chunks.push(value); return this; } });
+    const bytes = chunks[1];
+    assert.deepEqual(bytes, Buffer.from(text));
+    assert.strictEqual(source.buffer(), bytes);
+    bytes[0] = 0;
+    assert.equal(snapshot.source(), text);
+    assert.equal(source.source(), text);
+  }
+});
 
 test('mutable Buffer follows reference method-local string caching', () => {
   function run(w) {
@@ -160,33 +197,12 @@ test('mutable Buffer follows reference method-local string caching', () => {
   assert.equal(planner.stats.nativeReads, 0);
 });
 
-test('custom Source and overridden streamChunks remain JS', () => {
+test('custom Sources participate in composite source maps', () => {
   class Custom extends api.Source {
     source() { return 'custom'; }
     updateHash(hash) { hash.update('custom'); }
   }
-  compare(w => new w.ConcatSource(new Custom(), new w.OriginalSource('a', 'x')), { native: false });
-  const o = new api.OriginalSource('x', 'x');
-  o.map(); let calls = 0;
-  const original = o.streamChunks;
-  o.streamChunks = function (...args) { calls++; return original.apply(this, args); };
-  planner.resetStats(); o.map();
-  assert.equal(calls, 1); assert.equal(planner.stats.nativeReads, 0);
-});
-
-test('streamChunks callback exceptions stop immediately without Rust entry', () => {
-  const source = new api.ConcatSource(new api.OriginalSource('a\nb\n', 'x'));
-  const error = new Error('stop'); let count = 0;
-  planner.resetStats();
-  assert.throws(() => source.streamChunks({}, () => { count++; throw error; }, () => {}, () => {}), e => e === error);
-  assert.equal(count, 1); assert.equal(planner.stats.compilations, 0);
-});
-
-test('scopes stay in JavaScript', () => compare(w => new w.OriginalSource('let a=1;', 'x', new Map([['a', 'a']])), { native: false }));
-test('scopes map option is preserved', () => {
-  const make = w => new w.ConcatSource(new w.OriginalSource('let a=1;', 'x', new Map([['a', 'a']])));
-  planner.resetStats();assert.deepStrictEqual(make(api).map({ scopes: true }), make(ref).map({ scopes: true }));
-  assert.equal(planner.stats.nativeReads, 0);
+  compare(w => new w.ConcatSource(new w.CompatSource(new Custom()), new w.OriginalSource('a', 'x')), { native: false });
 });
 
 const rawMap = () => ({ version: 3, sources: ['original.js'], names: [], sourcesContent: ['let a=1;\n'], mappings: 'AAAA', file: 'generated.js' });
@@ -204,13 +220,14 @@ test('nested source-map composition', () => compare(w => new w.SourceMapSource('
 }, 'let a=1;\n', rawMap(), true)));
 test('map string inputs and missing sourcesContent', () => compare(w => new w.ConcatSource(new w.SourceMapSource('abc', 'x', JSON.stringify({version:3,sources:['x'],names:[],mappings:'AAAA'}))), { native: false }));
 
-test('native input reference bounds are checked', () => {
-  assert.throws(() => binding.compileSources([{kind:'concat',children:[0]}], []), /Invalid source reference/);
-  assert.throws(() => binding.compileSources([{kind:'concat',children:[-1]}], []), /Invalid source reference/);
+test('typed bindings validate receiver ownership and source type', () => {
+  assert.throws(() => binding.rawSource({}), /Invalid Source receiver/);
+  assert.throws(() => binding.originalSource(new api.RawSource('x'), true), /Invalid Source receiver/);
 });
 test('invalid mappings never reach the Rust decoder', () => {
   for(const mappings of ['ggggggggggggggggg', '!', 'ACAA', 'AAAAAA']) {
-    assert.equal(binding.compileSources([{kind:'mapped',text:'x',name:'x',sourceMap:{sources:['x'],sourcesContent:['x'],names:[],mappings}}],[]),null);
+    const source = new api.SourceMapSource('x', 'x', {version:3,sources:['x'],sourcesContent:['x'],names:[],mappings});
+    assert.equal(binding.debugSourceSnapshot(source), null);
   }
 });
 
@@ -296,19 +313,7 @@ test('native graph lifetimes are independent across Worker teardown', async () =
   }
 });
 
-test('CachedSource streaming is JS for both cold and populated caches', () => {
-  for (const warm of [false, true]) {
-    const a = new api.CachedSource(new api.OriginalSource('abc\ndef', 'x'));
-    const b = new ref.CachedSource(new ref.OriginalSource('abc\ndef', 'x'));
-    if (warm) { a.sourceAndMap(); b.sourceAndMap(); }
-    planner.resetStats();
-    assert.deepStrictEqual(stream(a, {}), stream(b, {}));
-    assert.equal(planner.stats.nativeReads, 0);
-    assert.equal(planner.stats.compilations, 0);
-  }
-});
-
-test('PrefixSource stays in JS with matching streaming callbacks', () => compare(w => new w.PrefixSource('> ', new w.OriginalSource('a\nb\n', 'x')), { native: false }));
+test('PrefixSource preserves mapped positions', () => compare(w => new w.PrefixSource('> ', new w.OriginalSource('a\nb\n', 'x')), { native: false }));
 
 test('exposed replacement accessors do not run during native eligibility checks', () => {
   function run(w) {
@@ -323,10 +328,10 @@ test('exposed replacement accessors do not run during native eligibility checks'
   assert.equal(planner.stats.nativeReads, 0);
 });
 
-test('proxy Sources and options keep application callbacks on the JS path', () => {
+test('proxy map options keep application callbacks on the JS path', () => {
   function run(w) {
     let reads = 0;
-    const source = new Proxy(new w.OriginalSource('abc', 'x'), { get(target, key, receiver) { reads++; return Reflect.get(target, key, receiver); } });
+    const source = new w.OriginalSource('abc', 'x');
     const options = new Proxy({}, { get(target, key) { reads++; return target[key]; } });
     const result = new w.ConcatSource(source).sourceAndMap(options);
     return { result, reads };

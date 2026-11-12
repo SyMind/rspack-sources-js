@@ -2,7 +2,7 @@
 
 const assert = require("assert");
 const { describe, it } = require("node:test");
-const { ConcatSource } = require("../..");
+const { CompatSource, ConcatSource } = require("../..");
 const { RawSource } = require("../..");
 const { OriginalSource } = require("../..");
 const { SourceMapSource } = require("../..");
@@ -207,7 +207,7 @@ describe("concatSource", () => {
 				return customBuffer.length;
 			},
 		};
-		const source = new ConcatSource(customSource, new RawSource("-after"));
+		const source = new ConcatSource(new CompatSource(customSource), new RawSource("-after"));
 		const result = source.buffer();
 		assert.deepStrictEqual(
 			result,
@@ -261,7 +261,7 @@ describe("concatSource", () => {
 				return 4;
 			},
 		};
-		const source = new ConcatSource(bufferOnly, sourceOnly);
+		const source = new ConcatSource(new CompatSource(bufferOnly), new CompatSource(sourceOnly));
 		const buffers = source.buffers();
 		assert.strictEqual(buffers.length, 2);
 		assert.strictEqual(buffers[0], customBuffer);
@@ -277,7 +277,7 @@ describe("concatSource", () => {
 				return "custom-content".length;
 			},
 		};
-		const source = new ConcatSource(customSource, new RawSource("-after"));
+		const source = new ConcatSource(new CompatSource(customSource), new RawSource("-after"));
 		const result = source.buffer();
 		assert.deepStrictEqual(
 			result,

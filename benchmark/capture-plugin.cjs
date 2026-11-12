@@ -1,10 +1,10 @@
 'use strict';
-const { encodeGraph, fingerprint, streamFingerprint, UnsupportedGraph } = require('./graph.cjs');
+const { encodeGraph, fingerprint, UnsupportedGraph } = require('./graph.cjs');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { gzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const sourceKinds = ['RawSource', 'OriginalSource', 'SourceMapSource', 'ConcatSource', 'ReplaceSource', 'CachedSource', 'PrefixSource', 'SizeOnlySource', 'CompatSource', 'Source'];
-const methods = ['source', 'buffer', 'buffers', 'size', 'map', 'sourceAndMap', 'updateHash', 'streamChunks'];
+const methods = ['source', 'buffer', 'buffers', 'size', 'map', 'sourceAndMap', 'updateHash'];
 
 class CaptureSourcesPlugin {
   constructor(options) { this.options = options; }
@@ -41,24 +41,16 @@ class CaptureSourcesPlugin {
         if (depth) return original.apply(this, args);
         let rootId = ids.get(this);
         if (rootId === undefined) { rootId = rootCounter++; ids.set(this, rootId); }
-        const event = { sequence: sequence++, rootId, phase, kind: actualKind, method, asset: assets.get(this) ?? null, options: ['map', 'sourceAndMap', 'streamChunks'].includes(method) ? args[0] ?? null : null };
+        const event = { sequence: sequence++, rootId, phase, kind: actualKind, method, asset: assets.get(this) ?? null, options: ['map', 'sourceAndMap'].includes(method) ? args[0] ?? null : null };
         trace.push(event);
         const score = estimate(this);
         const previous = selected.get(bucket);
         let candidate;
         if (!previous || score > previous.score) {
-          try { candidate = { ...event, score, graph: encodeGraph(this, api), hashAlgorithm, args: ['map', 'sourceAndMap', 'streamChunks'].includes(method) && args[0] !== undefined ? [structuredClone(args[0])] : [] }; }
+          try { candidate = { ...event, score, graph: encodeGraph(this, api), hashAlgorithm, args: ['map', 'sourceAndMap'].includes(method) && args[0] !== undefined ? [structuredClone(args[0])] : [] }; }
           catch (error) { if (!(error instanceof UnsupportedGraph)) throw error; const reason = `${bucket}: ${error.message}`; unsupported.set(reason, (unsupported.get(reason) ?? 0) + 1); }
         }
-        let stream, shadow, realHash, originalUpdate, ownUpdate;
-        if (candidate && method === 'streamChunks') {
-          stream = streamFingerprint();
-          const callbacks = args.slice(1, 4);
-          args = [args[0], ...callbacks.map((callback, index) => (...values) => {
-            stream.callbacks[index](...values);
-            return callback(...values);
-          })];
-        }
+        let shadow, realHash, originalUpdate, ownUpdate;
         if (candidate && method === 'updateHash') {
           realHash = args[0]; shadow = createHash(hashAlgorithm);
           ownUpdate = Object.getOwnPropertyDescriptor(realHash, 'update'); originalUpdate = realHash.update;
@@ -68,7 +60,7 @@ class CaptureSourcesPlugin {
         try {
           const result = original.apply(this, args);
           if (candidate) {
-            candidate.expected = shadow ? shadow.digest('hex') : stream ? stream.finish(result) : fingerprint(result);
+            candidate.expected = shadow ? shadow.digest('hex') : fingerprint(result);
             selected.set(bucket, candidate);
           }
           return result;

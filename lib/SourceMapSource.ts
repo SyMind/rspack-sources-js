@@ -2,309 +2,138 @@
     MIT License http://www.opensource.org/licenses/mit-license.php
     Author Tobias Koppers @sokra
 */
-"use strict";
-import Source = require("./Source");
-import { getMap, getSourceAndMap } from "./helpers/getFromStreamChunks";
-import streamChunksOfCombinedSourceMap = require("./helpers/streamChunksOfCombinedSourceMap");
-import streamChunksOfSourceMap = require("./helpers/streamChunksOfSourceMap");
-import { isDualStringBufferCachingEnabled, } from "./helpers/stringBufferUtils";
-class SourceMapSource extends Source {
-    declare _valueAsString: undefined | string;
-    declare _valueAsBuffer: undefined | Buffer;
-    declare _name: string;
-    declare _hasSourceMap: boolean;
-    declare _sourceMapAsObject: undefined | RawSourceMap;
-    declare _sourceMapAsString: undefined | string;
-    declare _sourceMapAsBuffer: undefined | Buffer;
-    declare _hasOriginalSource: boolean;
-    declare _originalSourceAsString: string | undefined;
-    declare _originalSourceAsBuffer: Buffer<ArrayBufferLike> | undefined;
-    declare _hasInnerSourceMap: boolean;
-    declare _innerSourceMapAsObject: undefined | RawSourceMap;
-    declare _innerSourceMapAsString: undefined | string;
-    declare _innerSourceMapAsBuffer: undefined | Buffer;
-    declare _removeOriginalSource: boolean | undefined;
-    declare _cachedSize: number | undefined;
-    constructor(value: string | Buffer<ArrayBufferLike>, name: string, sourceMap?: string | Buffer<ArrayBufferLike> | RawSourceMap | undefined, originalSource?: SourceValue | undefined, innerSourceMap?: string | Buffer<ArrayBufferLike> | RawSourceMap | null | undefined, removeOriginalSource?: boolean | undefined) {
-        super();
-        const valueIsBuffer = Buffer.isBuffer(value);
-        this._valueAsString = valueIsBuffer ? undefined : value;
-        this._valueAsBuffer = valueIsBuffer ? value : undefined;
-        this._name = name;
-        this._hasSourceMap = Boolean(sourceMap);
-        const sourceMapIsBuffer = Buffer.isBuffer(sourceMap);
-        const sourceMapIsString = typeof sourceMap === "string";
-        this._sourceMapAsObject =
-            sourceMapIsBuffer || sourceMapIsString ? undefined : sourceMap;
-        this._sourceMapAsString = sourceMapIsString ? sourceMap : undefined;
-        this._sourceMapAsBuffer = sourceMapIsBuffer ? sourceMap : undefined;
-        this._hasOriginalSource = Boolean(originalSource);
-        const originalSourceIsBuffer = Buffer.isBuffer(originalSource);
-        this._originalSourceAsString = originalSourceIsBuffer
-            ? undefined
-            : originalSource;
-        this._originalSourceAsBuffer = originalSourceIsBuffer
-            ? originalSource
-            : undefined;
-        this._hasInnerSourceMap = Boolean(innerSourceMap);
-        const innerSourceMapIsBuffer = Buffer.isBuffer(innerSourceMap);
-        const innerSourceMapIsString = typeof innerSourceMap === "string";
-        this._innerSourceMapAsObject =
-            innerSourceMapIsBuffer || innerSourceMapIsString
-                ? undefined
-                : innerSourceMap || undefined;
-        this._innerSourceMapAsString = innerSourceMapIsString
-            ? innerSourceMap
-            : undefined;
-        this._innerSourceMapAsBuffer = innerSourceMapIsBuffer
-            ? innerSourceMap
-            : undefined;
-        this._removeOriginalSource = removeOriginalSource;
+import { types } from 'node:util';
+import { Source } from './Source';
+import binding = require('./binding');
+import { composeMap } from './helpers/sourceMapTransforms';
+import { contextOf, sharedHelpers } from './nativeContext';
+
+export class SourceMapSource extends Source {
+  static readonly #helpers = {
+    ...sharedHelpers,
+    mapInput(value: any) {
+      if (!value || types.isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype) return;
+      const allowed = ['version', 'mappings', 'sources', 'sourcesContent', 'names', 'file', 'sourceRoot'];
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      if (Object.keys(descriptors).some(key => !allowed.includes(key) || !('value' in descriptors[key]))) return;
+      const isText = (v: unknown): v is string => typeof v === 'string' && v.isWellFormed();
+      if (value.version !== 3 || !isText(value.mappings)) return;
+      for (const key of ['sources', 'sourcesContent', 'names']) {
+        const entries = value[key] ?? [];
+        if (!sharedHelpers.plainArray(entries) || !entries.every(isText)) return;
+      }
+      const sourcesContent = value.sourcesContent ?? [];
+      if (sourcesContent.length !== (value.sources ?? []).length || sourcesContent.some((v: string) => !v)) return;
+      if (value.file !== undefined && !isText(value.file) || value.sourceRoot !== undefined && !isText(value.sourceRoot)) return;
+      return {
+        mappings: value.mappings,
+        sources: value.sources ?? [],
+        sourcesContent,
+        names: value.names ?? [],
+        file: value.file,
+        sourceRoot: value.sourceRoot,
+      };
+    },
+  };
+
+  get #name(): string {
+    return binding.sourceMapGetField(this, "_name");
+  }
+
+  get #hasOriginalSource(): boolean {
+    return binding.sourceMapGetField(this, "_hasOriginalSource");
+  }
+
+  get #hasInnerSourceMap(): boolean {
+    return binding.sourceMapGetField(this, "_hasInnerSourceMap");
+  }
+
+  get #removeOriginalSource(): boolean | undefined {
+    return binding.sourceMapGetField(this, "_removeOriginalSource");
+  }
+
+  constructor(value: string | Buffer<ArrayBufferLike>, name: string, sourceMap?: string | Buffer<ArrayBufferLike> | RawSourceMap | undefined, originalSource?: SourceValue | undefined, innerSourceMap?: string | Buffer<ArrayBufferLike> | RawSourceMap | null | undefined, removeOriginalSource?: boolean | undefined) {
+    super();
+    const native = contextOf(this, SourceMapSource.#helpers);
+
+    binding.sourceMapNew(this, native, value, name, sourceMap, originalSource, innerSourceMap, removeOriginalSource);
+  }
+
+  getArgsAsBuffers(): [
+    Buffer<ArrayBufferLike>,
+    string,
+    Buffer<ArrayBufferLike>,
+    Buffer<ArrayBufferLike> | undefined,
+    Buffer<ArrayBufferLike> | undefined,
+    boolean | undefined
+  ] {
+    return binding.sourceMapGetArgsAsBuffers(this);
+  }
+
+  buffer(): Buffer<ArrayBufferLike> {
+    return binding.sourceMapBuffer(this);
+  }
+
+  buffers(): Buffer[] {
+    return binding.sourceMapBuffers(this);
+  }
+
+  size(): number {
+    return binding.sourceMapSize(this);
+  }
+
+  source(): SourceValue {
+    return binding.sourceMapSource(this);
+  }
+
+  #originalSourceString(): string | undefined {
+    return binding.sourceMapOriginalSourceString(this);
+  }
+
+  #innerSourceMapObject(): any {
+    return binding.sourceMapInnerSourceMapObject(this);
+  }
+
+  #sourceMapObject(): any {
+    return binding.sourceMapSourceMapObject(this);
+  }
+
+  map(options?: MapOptions | undefined): RawSourceMap | null {
+    const map = binding.sourceMapMap(this, options);
+    return map === undefined ? this.#composedMap(this.source() as string, options) : map;
+  }
+
+  sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
+    const result = binding.sourceMapSourceAndMap(this, options);
+    if (result !== undefined) return result;
+    const source = this.source() as string;
+    return { source, map: this.#composedMap(source, options) };
+  }
+
+  #composedMap(source: string, options?: MapOptions) {
+    return composeMap(source, this.#sourceMapObject(), this.#name, this.#originalSourceString(),
+      this.#innerSourceMapObject(), this.#removeOriginalSource, options);
+  }
+
+  updateHash(hash: HashLike): void {
+    hash.update("SourceMapSource");
+    hash.update(this.buffer());
+    hash.update(binding.sourceMapSourceMapBuffer(this));
+    if (this.#hasOriginalSource) {
+      hash.update(binding.sourceMapOriginalSourceBuffer(this)!);
     }
-    getArgsAsBuffers(): [
-        Buffer<ArrayBufferLike>,
-        string,
-        Buffer<ArrayBufferLike>,
-        Buffer<ArrayBufferLike> | undefined,
-        Buffer<ArrayBufferLike> | undefined,
-        boolean | undefined
-    ] {
-        return [
-            this.buffer(),
-            this._name,
-            this._sourceMapBuffer(),
-            this._originalSourceBuffer(),
-            this._innerSourceMapBuffer(),
-            this._removeOriginalSource,
-        ];
+    if (this.#hasInnerSourceMap) {
+      hash.update(binding.sourceMapInnerSourceMapBuffer(this)!);
     }
-    buffer(): Buffer<ArrayBufferLike> {
-        if (this._valueAsBuffer === undefined) {
-            const value = Buffer.from((this._valueAsString as string), "utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._valueAsBuffer = value;
-            }
-            return value;
-        }
-        return this._valueAsBuffer;
-    }
-    size(): number {
-        if (this._cachedSize !== undefined)
-            return this._cachedSize;
-        if (this._valueAsBuffer !== undefined) {
-            return (this._cachedSize = this._valueAsBuffer.length);
-        }
-        return (this._cachedSize = Buffer.byteLength((this._valueAsString as string), "utf8"));
-    }
-    source(): SourceValue {
-        if (this._valueAsString === undefined) {
-            const value = (this._valueAsBuffer as Buffer<ArrayBufferLike>).toString("utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._valueAsString = value;
-            }
-            return value;
-        }
-        return this._valueAsString;
-    }
-    _originalSourceBuffer(): Buffer<ArrayBufferLike> | undefined {
-        if (this._originalSourceAsBuffer === undefined && this._hasOriginalSource) {
-            const value = Buffer.from((this._originalSourceAsString as string), "utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._originalSourceAsBuffer = value;
-            }
-            return value;
-        }
-        return this._originalSourceAsBuffer;
-    }
-    _originalSourceString() {
-        if (this._originalSourceAsString === undefined && this._hasOriginalSource) {
-            const value = (this._originalSourceAsBuffer as Buffer<ArrayBufferLike>).toString("utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._originalSourceAsString = value;
-            }
-            return value;
-        }
-        return this._originalSourceAsString;
-    }
-    _innerSourceMapObject() {
-        if (this._innerSourceMapAsObject === undefined && this._hasInnerSourceMap) {
-            const value = JSON.parse(this._innerSourceMapString());
-            if (isDualStringBufferCachingEnabled()) {
-                this._innerSourceMapAsObject = value;
-            }
-            return value;
-        }
-        return this._innerSourceMapAsObject;
-    }
-    _innerSourceMapBuffer() {
-        if (this._innerSourceMapAsBuffer === undefined && this._hasInnerSourceMap) {
-            const value = Buffer.from(this._innerSourceMapString(), "utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._innerSourceMapAsBuffer = value;
-            }
-            return value;
-        }
-        return this._innerSourceMapAsBuffer;
-    }
-    _innerSourceMapString(): string {
-        if (this._innerSourceMapAsString === undefined && this._hasInnerSourceMap) {
-            if (this._innerSourceMapAsBuffer !== undefined) {
-                const value = this._innerSourceMapAsBuffer.toString("utf8");
-                if (isDualStringBufferCachingEnabled()) {
-                    this._innerSourceMapAsString = value;
-                }
-                return value;
-            }
-            const value = JSON.stringify(this._innerSourceMapAsObject);
-            if (isDualStringBufferCachingEnabled()) {
-                this._innerSourceMapAsString = value;
-            }
-            return value;
-        }
-        return (this._innerSourceMapAsString as string);
-    }
-    _sourceMapObject() {
-        if (this._sourceMapAsObject === undefined) {
-            const value = JSON.parse(this._sourceMapString());
-            if (isDualStringBufferCachingEnabled()) {
-                this._sourceMapAsObject = value;
-            }
-            return value;
-        }
-        return this._sourceMapAsObject;
-    }
-    _sourceMapBuffer() {
-        if (this._sourceMapAsBuffer === undefined) {
-            const value = Buffer.from(this._sourceMapString(), "utf8");
-            if (isDualStringBufferCachingEnabled()) {
-                this._sourceMapAsBuffer = value;
-            }
-            return value;
-        }
-        return this._sourceMapAsBuffer;
-    }
-    _sourceMapString() {
-        if (this._sourceMapAsString === undefined) {
-            if (this._sourceMapAsBuffer !== undefined) {
-                const value = this._sourceMapAsBuffer.toString("utf8");
-                if (isDualStringBufferCachingEnabled()) {
-                    this._sourceMapAsString = value;
-                }
-                return value;
-            }
-            const value = JSON.stringify(this._sourceMapAsObject);
-            if (isDualStringBufferCachingEnabled()) {
-                this._sourceMapAsString = value;
-            }
-            return value;
-        }
-        return this._sourceMapAsString;
-    }
-    map(options?: MapOptions | undefined): RawSourceMap | null {
-        if (!this._hasInnerSourceMap) {
-            return this._sourceMapObject();
-        }
-        return getMap(this, options);
-    }
-    sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
-        if (!this._hasInnerSourceMap) {
-            return {
-                source: this.source(),
-                map: this._sourceMapObject(),
-            };
-        }
-        return getSourceAndMap(this, options);
-    }
-    streamChunks(options: Options, onChunk: OnChunk, onSource: OnSource, onName: OnName): GeneratedSourceInfo {
-        if (this._hasInnerSourceMap) {
-            return streamChunksOfCombinedSourceMap((this.source() as string), this._sourceMapObject(), this._name, (this._originalSourceString() as string), this._innerSourceMapObject(), this._removeOriginalSource, onChunk, onSource, onName, Boolean(options && options.finalSource), Boolean(options && options.columns !== false));
-        }
-        return streamChunksOfSourceMap((this.source() as string), this._sourceMapObject(), onChunk, onSource, onName, Boolean(options && options.finalSource), Boolean(options && options.columns !== false));
-    }
-    /**
-     * Release cached data held by this source. clearCache is a memory
-     * hint: it never affects correctness or output, only how expensive
-     * the next read is. Subclasses override; the base is a no-op so
-     * every Source supports the call. Composite sources always recurse
-     * into wrapped sources. When the same child is reachable via several
-     * parents (e.g. modules shared across webpack chunks), pass a shared
-     * `visited` WeakSet so each subtree is walked at most once.
-     * Not safe to call concurrently with source/map/sourceAndMap/
-     * streamChunks/updateHash on the same instance.
-     */
-    clearCache(options?: ClearCacheOptions | undefined, visited?: WeakSet<Source> | undefined): void {
-        if (visited !== undefined) {
-            if (visited.has(this))
-                return;
-            visited.add(this);
-        }
-        const clearSource = !options || options.source !== false;
-        const clearMaps = !options || options.maps !== false;
-        const clearParsedMap = options !== undefined && options.parsedMap === true;
-        // For every dual-cached pair, drop the string form when the
-        // buffer is also held — buffer is more compact in V8 (1 byte/char
-        // vs 2) and the string rehydrates cheaply. Parsed object forms
-        // of source maps are heavier but only dropped when
-        // `parsedMap: true` is set, because re-parsing JSON is much more
-        // expensive than `toString` from a buffer.
-        if (clearSource) {
-            if (this._valueAsString !== undefined &&
-                this._valueAsBuffer !== undefined) {
-                this._valueAsString = undefined;
-            }
-            if (this._originalSourceAsString !== undefined &&
-                this._originalSourceAsBuffer !== undefined) {
-                this._originalSourceAsString = undefined;
-            }
-        }
-        if (clearMaps) {
-            if (this._sourceMapAsString !== undefined &&
-                this._sourceMapAsBuffer !== undefined) {
-                this._sourceMapAsString = undefined;
-            }
-            if (clearParsedMap &&
-                this._sourceMapAsObject !== undefined &&
-                (this._sourceMapAsBuffer !== undefined ||
-                    this._sourceMapAsString !== undefined)) {
-                this._sourceMapAsObject = undefined;
-            }
-            if (this._innerSourceMapAsString !== undefined &&
-                this._innerSourceMapAsBuffer !== undefined) {
-                this._innerSourceMapAsString = undefined;
-            }
-            if (clearParsedMap &&
-                this._innerSourceMapAsObject !== undefined &&
-                (this._innerSourceMapAsBuffer !== undefined ||
-                    this._innerSourceMapAsString !== undefined)) {
-                this._innerSourceMapAsObject = undefined;
-            }
-        }
-    }
-    updateHash(hash: HashLike): void {
-        hash.update("SourceMapSource");
-        hash.update(this.buffer());
-        hash.update(this._sourceMapBuffer());
-        if (this._hasOriginalSource) {
-            hash.update((this._originalSourceBuffer() as Buffer<ArrayBufferLike>));
-        }
-        if (this._hasInnerSourceMap) {
-            hash.update((this._innerSourceMapBuffer() as Buffer<ArrayBufferLike>));
-        }
-        hash.update(this._removeOriginalSource ? "true" : "false");
-    }
+    hash.update(this.#removeOriginalSource ? "true" : "false");
+  }
 }
-export = SourceMapSource;
-declare namespace SourceMapSource {
-    export { ClearCacheOptions, HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, GeneratedSourceInfo, OnChunk, OnName, OnSource, Options, };
+
+export declare namespace SourceMapSource {
+  export { HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, };
 }
-type ClearCacheOptions = import("./Source").ClearCacheOptions;
 type HashLike = import("./Source").HashLike;
 type MapOptions = import("./Source").MapOptions;
 type RawSourceMap = import("./Source").RawSourceMap;
 type SourceAndMap = import("./Source").SourceAndMap;
 type SourceValue = import("./Source").SourceValue;
-type GeneratedSourceInfo = import("./helpers/getGeneratedSourceInfo").GeneratedSourceInfo;
-type OnChunk = import("./helpers/streamChunks").OnChunk;
-type OnName = import("./helpers/streamChunks").OnName;
-type OnSource = import("./helpers/streamChunks").OnSource;
-type Options = import("./helpers/streamChunks").Options;

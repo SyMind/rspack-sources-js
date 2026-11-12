@@ -1,5 +1,7 @@
 "use strict";
 
+const { read: readInternal } = require("../native-internals.cjs");
+
 const assert = require("assert");
 const crypto = require("crypto");
 const { afterEach, beforeEach, describe, it } = require("node:test");
@@ -62,29 +64,17 @@ describe("rawSource", () => {
 		assert.strictEqual(source.map({ columns: false }), null);
 	});
 
-	it("stream chunks works correctly", () => {
-		const source = new RawSource(CODE_STRING, true);
-		let chunks = 0;
-		// @ts-expect-error for tests
-		source.streamChunks(null, (line, lineNum) => {
-			chunks++;
-			assert.strictEqual(
-				line,
-				`console.log('test${"2".repeat(lineNum - 1)}');\n`,
-			);
-		});
-		assert.strictEqual(chunks, 3);
-	});
-
-	it("does not cache a buffer when hashing a string-backed source", () => {
+	it("passes the content Buffer to the hash and respects dual caching", () => {
 		const source = new RawSource(CODE_STRING);
-		const internal = /** @type {{ _valueAsBuffer?: Buffer }} */ (
-			/** @type {unknown} */ (source)
-		);
-
-		source.updateHash(crypto.createHash("md5"));
-
-		assert.strictEqual(internal._valueAsBuffer, undefined);
+		const updates = [];
+		source.updateHash({
+			update(value) {
+				updates.push(value);
+				return this;
+			},
+		});
+		assert.deepStrictEqual(updates, ["RawSource", Buffer.from(CODE_STRING)]);
+		assert.strictEqual(readInternal(source, "_valueAsBuffer"), updates[1]);
 	});
 
 	for (const text of [
@@ -92,7 +82,7 @@ describe("rawSource", () => {
 		"\u00FC\u00EF \u2603 \uD83D\uDE80",
 		CODE_STRING,
 	]) {
-		it(`hashes a string without materializing its buffer (${JSON.stringify(
+		it(`hashes the UTF-8 bytes of a string (${JSON.stringify(
 			text,
 		)})`, () => {
 			const source = new RawSource(text);
@@ -106,7 +96,6 @@ describe("rawSource", () => {
 			source.updateHash(hash);
 
 			assert.strictEqual(hash.digest("hex"), expected);
-			// hashing must not leave the source holding a second copy
 			assert.strictEqual(source.isBuffer(), false);
 			assert.strictEqual(source.source(), text);
 		});
@@ -181,32 +170,6 @@ describe("rawSource", () => {
 			// The same buffer as the original value should always be returned.
 			assert.deepStrictEqual(originalValue, source.buffer());
 			assert.deepStrictEqual(source.buffer(), source.buffer());
-		});
-
-		it("stream chunks works correctly", () => {
-			const source = new RawSource(CODE_STRING, true);
-			let chunks = 0;
-			// @ts-expect-error for tests
-			source.streamChunks(null, (line, lineNum) => {
-				chunks++;
-				assert.strictEqual(
-					line,
-					`console.log('test${"2".repeat(lineNum - 1)}');\n`,
-				);
-			});
-			assert.strictEqual(chunks, 3);
-		});
-
-		it("should handle streamChunks when constructed from a Buffer without pre-caching", () => {
-			// Buffer backing, convertToString=false. _valueAsString remains undefined.
-			const source = new RawSource(Buffer.from(CODE_STRING));
-			/** @type {(string | undefined)[]} */
-			const chunks = [];
-			// @ts-expect-error for tests
-			source.streamChunks(null, (chunk) => {
-				chunks.push(chunk);
-			});
-			assert.strictEqual(chunks.length, 3);
 		});
 
 		it("should expose source() on a Buffer-backed RawSource", () => {

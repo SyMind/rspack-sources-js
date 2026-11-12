@@ -8,7 +8,6 @@ const { ConcatSource } = require("../..");
 const { OriginalSource } = require("../..");
 const { RawSource } = require("../..");
 const { Source } = require("../..");
-const streamChunks = require("../../dist/helpers/streamChunks");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,
@@ -277,10 +276,10 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.strictEqual(cachedSource.source(), buffer);
 			assert.deepStrictEqual(source.getCalls(), {
 				size: 0,
-				source: 0,
+				source: 1,
 				buffer: 0,
-				map: 0,
-				sourceAndMap: 1,
+				map: 1,
+				sourceAndMap: 0,
 				hash: 0,
 			});
 		});
@@ -333,26 +332,6 @@ for (const enableMemoryOptimizations of [false, true]) {
 				sourceAndMap: 0,
 				hash: 0,
 			});
-		});
-
-		it("should include map in the cache if only streamChunks was computed", () => {
-			const original = new OriginalSource("Hello World", "test.txt");
-			const source = new TrackedSource(original);
-			const cachedSource = new CachedSource(source);
-
-			// @ts-expect-error for tests
-			source.streamChunks = (...args) => streamChunks(original, ...args);
-
-			// fill up cache
-			cachedSource.streamChunks(
-				{},
-				() => {},
-				() => {},
-				() => {},
-			);
-
-			const cachedData = cachedSource.getCachedData();
-			assert.strictEqual(cachedData.maps.size, 1);
 		});
 
 		it("should allow to store and restore cached data (with SourceMap)", () => {
@@ -590,25 +569,6 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.strictEqual(hashB.digest("hex"), expected);
 		});
 
-		it("should allow streamChunks when cached map exists but source is not cached", () => {
-			const original = new OriginalSource("Hello World", "file.js");
-			const cachedSource = new CachedSource(original);
-
-			// Populate map cache only (no source/buffer cached yet)
-			cachedSource.map({});
-
-			const chunks = [];
-			cachedSource.streamChunks(
-				{},
-				(...args) => {
-					chunks.push(args);
-				},
-				() => {},
-				() => {},
-			);
-			assert.ok(chunks.length > 0);
-		});
-
 		it("should return Buffer[] from buffers() and delegate to the original source", () => {
 			const original = new ConcatSource(
 				new RawSource(Buffer.from("hello ")),
@@ -657,25 +617,21 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.deepStrictEqual(clone.size(), source.size());
 		});
 
-		it("should hand out a recorded hash update without a big string", () => {
+		it("should export a recorded large hash string as a Buffer", () => {
 			const big = "a".repeat(200000);
-			const source = new CachedSource(new OriginalSource(big, "big.js"));
-			const internal = /** @type {{ _cachedHashUpdate: unknown[] }} */ (
-				/** @type {unknown} */ (source)
-			);
-
+			class StringHashSource extends RawSource {
+				updateHash(hash) {
+					hash.update(this.source());
+				}
+			}
+			const source = new CachedSource(new StringHashSource(big));
 			source.updateHash(crypto.createHash("md5"));
-
-			// a source nobody asks cached data of keeps its own string, uncopied
-			assert.ok(internal._cachedHashUpdate.includes(big));
+			const updates = [];
+			source.updateHash({ update: (item) => updates.push(item) });
+			assert.deepStrictEqual(updates, [big]);
 
 			const cachedData = source.getCachedData();
-			assert.notStrictEqual(cachedData.hash, undefined);
-			for (const item of /** @type {(string | Buffer)[]} */ (cachedData.hash)) {
-				assert.notStrictEqual(typeof item, "string");
-			}
-
-			// asking again encodes nothing: the recording already holds buffers
+			assert.deepStrictEqual(cachedData.hash, [Buffer.from(big, "utf8")]);
 			assert.strictEqual(source.getCachedData().hash, cachedData.hash);
 
 			// @ts-expect-error for tests
@@ -687,13 +643,11 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.strictEqual(cloneHash.digest("hex"), sourceHash.digest("hex"));
 		});
 
-		it("should allocate no map cache until a map is asked for", () => {
-			const original = new OriginalSource("Hello World", "hello.txt");
+		it("should read the original map only when first requested after clearing", () => {
+			const original = new TrackedSource(
+				new OriginalSource("Hello World", "hello.txt"),
+			);
 			const source = new CachedSource(original);
-			const mapCache = () =>
-				/** @type {{ _cachedMaps: Map<string, unknown> | undefined }} */ (
-					/** @type {unknown} */ (source)
-				)._cachedMaps;
 
 			source.source();
 			source.buffer();
@@ -701,38 +655,15 @@ for (const enableMemoryOptimizations of [false, true]) {
 			source.updateHash(crypto.createHash("md5"));
 			source.getCachedData();
 			source.clearCache();
-			assert.strictEqual(mapCache(), undefined);
-
-			assert.deepStrictEqual(source.map({}), original.map({}));
-			assert.strictEqual(mapCache() instanceof Map, true);
-			assert.deepStrictEqual(
-				source.sourceAndMap({}),
-				original.sourceAndMap({}),
-			);
-
+			assert.strictEqual(original.mapCalled, 0);
+			const map = source.map({});
+			assert.strictEqual(original.mapCalled, 1);
+			assert.strictEqual(source.sourceAndMap({}).map, map);
+			assert.strictEqual(original.mapCalled, 1);
 			source.clearCache();
-			assert.strictEqual(
-				/** @type {Map<string, unknown>} */ (mapCache()).size,
-				0,
-			);
-			assert.deepStrictEqual(source.map({}), original.map({}));
+			assert.deepStrictEqual(source.map({}), map);
+			assert.strictEqual(original.mapCalled, 2);
 		});
 
-		it("should stream a source whose map cache was never created", () => {
-			const original = new OriginalSource("Hello World", "hello.txt");
-			const source = new CachedSource(original);
-			const chunks = [];
-
-			source.source();
-			streamChunks(
-				source,
-				{ finalSource: false, columns: true },
-				(chunk) => chunks.push(chunk),
-				() => {},
-				() => {},
-			);
-
-			assert.deepStrictEqual(chunks, ["Hello World"]);
-		});
 	});
 }

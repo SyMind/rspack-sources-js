@@ -3,12 +3,15 @@ import { withCodSpeed } from '@codspeed/tinybench-plugin';
 import { getCodspeedRunnerMode, getV8Flags } from '@codspeed/core';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { restoreGraph } from './graph.cjs';
-import { loadCases, validateCases, replay, reference, implementation } from './replay.mjs';
+import { loadCases, validateCases, replay, reference, implementation, nativeState } from './replay.mjs';
 import { verifyReport } from './verification.mjs';
 
 const library = process.argv.find(arg => arg.startsWith('--implementation='))?.slice(17) ?? 'rspack';
 const filter = process.argv.find(arg => arg.startsWith('--filter='))?.slice(9) ?? '';
 const modeFilter = process.argv.find(arg => arg.startsWith('--mode='))?.slice(7);
+const state = process.argv.find(arg => arg.startsWith('--state='))?.slice(8) ?? 'cold';
+if (!['cold', 'warm', 'lifecycle', 'all'].includes(state)) throw new Error('--state must be cold, warm, lifecycle or all');
+const states = state === 'all' ? ['cold', 'warm', 'lifecycle'] : [state];
 const selected = loadCases({ filter, mode: modeFilter });
 if (!['webpack', 'rspack', 'both'].includes(library)) throw new Error('--implementation must be webpack, rspack or both');
 if (process.argv.includes('--list')) {
@@ -30,19 +33,35 @@ if (invalid.length) console.log(`EXCLUDED invalid output: ${invalid.map(row => r
 // A fixed sample count keeps graph rehydration outside the latency timer without
 // letting a nanosecond cached read cause millions of expensive setup iterations.
 const bench = withCodSpeed(new Bench({ name: 'antd-webpack-source-graphs', time: 0, iterations: 64, warmupTime: 0, warmupIterations: 8, setup() {}, teardown() {} }));
-let source, sink;
+let sink;
 for (const current of library === 'both' ? ['webpack', 'rspack'] : [library]) {
   const api = current === 'webpack' ? reference : implementation;
+  const stateAdapter = current === 'rspack' ? nativeState : undefined;
   for (const record of cases) {
-    // CI keeps both implementations in one report with distinct, stable URIs.
-    const name = library === 'both' ? `${current}/${record.id}` : record.id;
-    bench.add(name, () => { sink = replay(record, source); }, {
-      beforeEach() { source = restoreGraph(record.graph, api); },
-      afterAll() { source = undefined; sink = undefined; },
-    });
+    for (const currentState of states) {
+      const base = library === 'both' ? `${current}/${record.id}` : record.id;
+      const name = currentState === 'cold' ? base : `${base}/${currentState}`;
+      let instance;
+      bench.add(name, () => {
+        // Lifecycle includes captured graph restoration and constructor calls.
+        if (currentState === 'lifecycle') instance = restoreGraph(record.graph, api, stateAdapter);
+        sink = replay(record, instance);
+      }, {
+        beforeAll() {
+          if (currentState === 'warm') {
+            instance = restoreGraph(record.graph, api, stateAdapter);
+            replay(record, instance);
+          }
+        },
+        beforeEach() {
+          if (currentState === 'cold') instance = restoreGraph(record.graph, api, stateAdapter);
+        },
+        afterAll() { instance = undefined; sink = undefined; },
+      });
+    }
   }
 }
-console.log(JSON.stringify({ implementation: library, codspeedMode: mode, platform: `${process.platform}-${process.arch}`, node: process.version, verifiedCases: cases.length, excludedInvalid: invalid.length, semantics: 'observed webpack call with captured pre-call graph/cache state; graph construction excluded; new native handles on first read' }));
+console.log(JSON.stringify({ implementation: library, codspeedMode: mode, platform: `${process.platform}-${process.arch}`, node: process.version, verifiedCases: cases.length, excludedInvalid: invalid.length, state, semantics: 'cold: captured pre-call state, constructors excluded; warm: same instance after one replay; lifecycle: graph restoration plus observed call, not a full webpack build' }));
 bench.runSync();
 if (mode === 'walltime') console.table(bench.table());
 void sink;

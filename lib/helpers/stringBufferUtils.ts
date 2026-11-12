@@ -2,16 +2,17 @@
     MIT License http://www.opensource.org/licenses/mit-license.php
     Author Mark Knichel @mknichel
 */
-"use strict";
 let dualStringBufferCaching = true;
+
 /**
  * string and buffer version of source content is enabled. This is enabled by
  * default to improve performance but can consume more memory since values are
  * stored twice.
  */
 function isDualStringBufferCachingEnabled(): boolean {
-    return dualStringBufferCaching;
+  return dualStringBufferCaching;
 }
+
 /**
  * Enables an optimization to save both string and buffer in memory to avoid
  * repeat conversions between the two formats when they are requested. This
@@ -19,21 +20,24 @@ function isDualStringBufferCachingEnabled(): boolean {
  * additional memory since values are stored twice.
  */
 function enableDualStringBufferCaching(): void {
-    dualStringBufferCaching = true;
+  dualStringBufferCaching = true;
 }
+
 /**
  * Disables the optimization to save both string and buffer in memory. This
  * may increase performance but should reduce memory usage in the Webpack
  * compiler.
  */
 function disableDualStringBufferCaching(): void {
-    dualStringBufferCaching = false;
+  dualStringBufferCaching = false;
 }
 const interningStringMap = new Map<string, string>();
 let enableStringInterningRefCount = 0;
+
 function isStringInterningEnabled(): boolean {
-    return enableStringInterningRefCount > 0;
+  return enableStringInterningRefCount > 0;
 }
+
 /**
  * Starts a memory optimization to avoid repeat copies of the same string in
  * memory by caching a single reference to the string. This can reduce memory
@@ -48,8 +52,9 @@ function isStringInterningEnabled(): boolean {
  * interning ranges.
  */
 function enterStringInterningRange(): void {
-    enableStringInterningRefCount++;
+  enableStringInterningRefCount++;
 }
+
 /**
  * Stops the current string interning range. Once all string interning ranges
  * have been exited, this method will free all the memory used by the interned
@@ -57,11 +62,12 @@ function enterStringInterningRange(): void {
  * {@link enterStringInterningRange} was called.
  */
 function exitStringInterningRange(): void {
-    if (--enableStringInterningRefCount <= 0) {
-        interningStringMap.clear();
-        enableStringInterningRefCount = 0;
-    }
+  if (--enableStringInterningRefCount <= 0) {
+    interningStringMap.clear();
+    enableStringInterningRefCount = 0;
+  }
 }
+
 /**
  * Saves the string in a map to ensure that only one copy of the string exists
  * in memory at a given time. This is controlled by {@link enableStringInterning}
@@ -70,17 +76,17 @@ function exitStringInterningRange(): void {
  * compiler no longer needs to save the interned memory.
  */
 function internString(str: string): string {
-    if (!isStringInterningEnabled() ||
-        !str ||
-        str.length < 128 ||
-        typeof str !== "string") {
-        return str;
-    }
-    let internedString = interningStringMap.get(str);
-    if (internedString === undefined) {
-        internedString = str;
-        interningStringMap.set(str, internedString);
-    }
-    return internedString;
+  if (!isStringInterningEnabled() ||
+    !str ||
+    str.length < 128 ||
+    typeof str !== "string") {
+    return str;
+  }
+  let internedString = interningStringMap.get(str);
+  if (internedString === undefined) {
+    internedString = str;
+    interningStringMap.set(str, internedString);
+  }
+  return internedString;
 }
 export { disableDualStringBufferCaching, enableDualStringBufferCaching, enterStringInterningRange, exitStringInterningRange, internString, isDualStringBufferCachingEnabled };

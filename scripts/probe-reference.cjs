@@ -80,8 +80,5 @@ assert.equal(hashTrace[0].value, 'ReplaceSource');
 const chunks = new w.ConcatSource(new w.RawSource('a'), new w.OriginalSource('b', 'b.js')).buffers();
 assert.equal(Buffer.concat(chunks).toString(), 'ab');
 report.buffers = chunks.map(x => x.toString());
-const scoped = new w.OriginalSource('const a = 1;\n', 'a.js', new Map([['a', 'a']]));
-assert.equal(typeof scoped.map({ scopes: true }).scopes, 'string');
-report.scopes = { encoded: scoped.map({ scopes: true }).scopes, helpers: Object.keys(w.util.scopes) };
 report.exports = Object.keys(w);
 console.log(JSON.stringify(report, null, 2));

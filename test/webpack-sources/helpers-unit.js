@@ -6,16 +6,9 @@ const createMappingsSerializer = require("../../dist/helpers/createMappingsSeria
 const {
 	createMappingsWriter,
 } = require("../../dist/helpers/createMappingsSerializer");
-const {
-	getMap,
-	getSourceAndMap,
-} = require("../../dist/helpers/getFromStreamChunks");
-const getGeneratedSourceInfo = require("../../dist/helpers/getGeneratedSourceInfo");
 const getSource = require("../../dist/helpers/getSource");
 const readMappings = require("../../dist/helpers/readMappings");
 const splitIntoLines = require("../../dist/helpers/splitIntoLines");
-const splitIntoPotentialTokens = require("../../dist/helpers/splitIntoPotentialTokens");
-const streamAndGetSourceAndMap = require("../../dist/helpers/streamAndGetSourceAndMap");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,
@@ -24,42 +17,6 @@ const {
 	internString,
 	isDualStringBufferCachingEnabled,
 } = require("../../dist/helpers/stringBufferUtils");
-
-describe("getGeneratedSourceInfo", () => {
-	it("should return empty object when source is undefined", () => {
-		assert.deepStrictEqual(getGeneratedSourceInfo(undefined), {});
-	});
-
-	it("should return correct info for single line", () => {
-		const info = getGeneratedSourceInfo("hello world");
-		assert.deepStrictEqual(info, {
-			generatedLine: 1,
-			generatedColumn: 11,
-			source: "hello world",
-		});
-	});
-
-	it("should return correct info for multi-line source", () => {
-		const info = getGeneratedSourceInfo("hello\nworld\nfoo");
-		assert.strictEqual(info.generatedLine, 3);
-		assert.strictEqual(info.generatedColumn, 3);
-	});
-
-	it("should count newlines accurately for trailing newline", () => {
-		const info = getGeneratedSourceInfo("a\nb\n");
-		assert.strictEqual(info.generatedLine, 3);
-		assert.strictEqual(info.generatedColumn, 0);
-	});
-
-	it("should handle empty string as single empty line", () => {
-		const info = getGeneratedSourceInfo("");
-		assert.deepStrictEqual(info, {
-			generatedLine: 1,
-			generatedColumn: 0,
-			source: "",
-		});
-	});
-});
 
 describe("getSource", () => {
 	const baseMap = {
@@ -105,43 +62,6 @@ describe("splitIntoLines", () => {
 
 	it("should handle empty string", () => {
 		assert.deepStrictEqual(splitIntoLines(""), []);
-	});
-});
-
-describe("splitIntoPotentialTokens", () => {
-	it("should split tokens from a non-empty string", () => {
-		const result = splitIntoPotentialTokens("a b c");
-		assert.notStrictEqual(result, null);
-	});
-
-	it("should return null for empty string", () => {
-		assert.strictEqual(splitIntoPotentialTokens(""), null);
-	});
-
-	// The tokens must always concatenate back to the original input,
-	// regardless of which scan phase the string ends in.
-	for (const input of [
-		"a b c", // phase 1 runs to end of string (no stop char)
-		"a;", // phase 2 delimiter run ends the string
-		"a\nb", // phase 3 consumes a trailing newline, then a final token
-		"\n", // a lone newline token
-		"a;b{c}\nd e\n", // mixed stops, whitespace and a trailing newline
-		"function foo() {\n\treturn 1;\n}\n", // realistic snippet (\t, spaces, ;{}\n)
-	]) {
-		it(`round-trips ${JSON.stringify(input)} back to the original string`, () => {
-			const tokens = splitIntoPotentialTokens(input);
-			assert.notStrictEqual(tokens, null);
-			assert.strictEqual(/** @type {string[]} */ (tokens).join(""), input);
-		});
-	}
-
-	it("keeps a trailing newline attached to its token", () => {
-		// "a\n" ends in phase 3; "b" is emitted by the bottom push.
-		assert.deepStrictEqual(splitIntoPotentialTokens("a\nb"), ["a\n", "b"]);
-	});
-
-	it("emits a delimiter-run token when the string ends in phase 2", () => {
-		assert.deepStrictEqual(splitIntoPotentialTokens("a;"), ["a;"]);
 	});
 });
 
@@ -201,101 +121,6 @@ describe("readMappings", () => {
 		assert.strictEqual(mappings.length, 2);
 		assert.deepStrictEqual(mappings[0], [1, 0, 0, 1, 0, -1]);
 		assert.deepStrictEqual(mappings[1], [2, 1, 0, 1, -1, -1]);
-	});
-});
-
-describe("getFromStreamChunks", () => {
-	// A SourceLike with streamChunks that emits non-sequential indices so
-	// getMap/getSourceAndMap's gap-fill loops run.
-	const makeSparseSource = () => ({
-		streamChunks(options, onChunk, onSource, onName) {
-			onSource(0, "first.js", "first content");
-			// jump from 0 to 2, leaving index 1 empty
-			onSource(2, "third.js", "third content");
-			onName(0, "alpha");
-			onName(2, "gamma");
-			onChunk("x", 1, 0, 0, 1, 0, 0);
-			onChunk("y", 1, 1, 2, 1, 0, 2);
-			return { generatedLine: 1, generatedColumn: 2, source: "xy" };
-		},
-	});
-
-	it("getMap fills missing source and name indices with null", () => {
-		const map =
-			/** @type {import("../../dist/Source").RawSourceMap} */
-			(getMap(makeSparseSource()));
-		assert.notStrictEqual(map, null);
-		assert.deepStrictEqual(map.sources, ["first.js", null, "third.js"]);
-		assert.deepStrictEqual(map.sourcesContent, [
-			"first content",
-			null,
-			"third content",
-		]);
-		assert.deepStrictEqual(map.names, ["alpha", null, "gamma"]);
-	});
-
-	it("getSourceAndMap fills missing source and name indices with null", () => {
-		const { map, source } = getSourceAndMap(makeSparseSource());
-		const m = /** @type {import("../../dist/Source").RawSourceMap} */ (map);
-		assert.strictEqual(source, "xy");
-		assert.notStrictEqual(m, null);
-		assert.deepStrictEqual(m.sources, ["first.js", null, "third.js"]);
-		assert.deepStrictEqual(m.sourcesContent, [
-			"first content",
-			null,
-			"third content",
-		]);
-		assert.deepStrictEqual(m.names, ["alpha", null, "gamma"]);
-	});
-
-	it("getMap returns null when no mappings are produced", () => {
-		const emptySource = {
-			streamChunks() {
-				return { generatedLine: 1, generatedColumn: 0, source: "" };
-			},
-		};
-		assert.strictEqual(getMap(emptySource), null);
-	});
-});
-
-describe("streamAndGetSourceAndMap", () => {
-	it("fills missing source and name indices and returns a map", () => {
-		const sparseSource = {
-			streamChunks(options, onChunk, onSource, onName) {
-				onSource(0, "first.js", "first content");
-				onSource(2, "third.js", "third content");
-				onName(0, "alpha");
-				onName(2, "gamma");
-				onChunk("x", 1, 0, 0, 1, 0, 0);
-				onChunk("y", 1, 1, 2, 1, 0, 2);
-				return { generatedLine: 1, generatedColumn: 2, source: "xy" };
-			},
-		};
-		const chunks = [];
-		const sources = [];
-		const names = [];
-		const result = streamAndGetSourceAndMap(
-			// @ts-expect-error for tests
-			sparseSource,
-			{},
-			(...args) => {
-				chunks.push(args);
-			},
-			(...args) => {
-				sources.push(args);
-			},
-			(...args) => {
-				names.push(args);
-			},
-		);
-		const { map: rawMap } = result;
-		const map = /** @type {import("../../dist/Source").RawSourceMap} */ (rawMap);
-		assert.strictEqual(result.source, "xy");
-		assert.deepStrictEqual(map.sources, ["first.js", null, "third.js"]);
-		assert.deepStrictEqual(map.names, ["alpha", null, "gamma"]);
-		assert.strictEqual(chunks.length, 2);
-		assert.strictEqual(sources.length, 2);
-		assert.strictEqual(names.length, 2);
 	});
 });
 

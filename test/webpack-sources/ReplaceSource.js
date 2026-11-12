@@ -56,7 +56,7 @@ describe("replaceSource", () => {
 			columns: false,
 		});
 
-		assert.deepStrictEqual(originalSource, source._source);
+		assert.strictEqual(originalSource, source.original());
 		assert.strictEqual(
 			originalText,
 			"Hello World!\n{}\nLine 3\nLine 4\nLine 5\nLast\nLine",
@@ -487,111 +487,7 @@ export default function StaticPage(_ref) {
 		assert.strictEqual(source.buffer(), inner.buffer());
 	});
 
-	it("streamChunks() trailing-remainer reuses column offset from prior in-chunk replacement", () => {
-		// In-chunk replacement updates generatedColumnOffsetLine to the
-		// trailing-remainer's line, so the trailing-remainer fast path
-		// takes the `generatedColumnOffsetLine === line` branch (the
-		// accumulate path, not the reset path). Drive streamChunks
-		// directly — source() doesn't go through it.
-		const inner = new OriginalSource("abc", "x.js");
-		const src = new ReplaceSource(inner);
-		src.replace(0, 0, "X"); // in-chunk: sets generatedColumnOffsetLine to 1
-		src.insert(10, "Y"); // trailing: hits the fast path on same line
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk, gl, gc) => chunks.push([chunk, gl, gc]),
-			() => {},
-			() => {},
-		);
-		const trailing = chunks[chunks.length - 1];
-		assert.strictEqual(trailing[0], "Y");
-		assert.strictEqual(trailing[1], 1);
-	});
-
-	it("streamChunks() emits trailing inserts past end-of-source", () => {
-		// Two `insert` calls past the inner source's end coalesce into a
-		// single trailing-remainer emission on the final generated line.
-		const inner = new OriginalSource("hello", "x.js");
-		const src = new ReplaceSource(inner);
-		src.insert(5, "X");
-		src.insert(5, "Y");
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk, gl, gc) => chunks.push([chunk, gl, gc]),
-			() => {},
-			() => {},
-		);
-		assert.strictEqual(src.source(), "helloXY");
-		const trailing = chunks[chunks.length - 1];
-		assert.strictEqual(trailing[0], "XY");
-		assert.strictEqual(trailing[1], 1);
-		assert.strictEqual(trailing[2], 5);
-	});
-
-	it("streamChunks() handles in-chunk multi-line replacement ending without newline", () => {
-		// Replace a single-character span with multi-line content whose
-		// last line doesn't end with '\n'. Exercises the in-chunk
-		// `m === matches.length - 1 && !contentLine.endsWith("\n")` branch
-		// in streamChunks (the multi-line counterpart to the single-line
-		// fast path).
-		const inner = new OriginalSource("ab", "x.js");
-		const src = new ReplaceSource(inner);
-		src.replace(0, 0, "A\nB");
-		assert.strictEqual(src.source(), "A\nBb");
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk) => chunks.push(chunk),
-			() => {},
-			() => {},
-		);
-		assert.ok(chunks.includes("A\n"));
-		assert.ok(chunks.includes("B"));
-	});
-
-	it("streamChunks() emits multi-line trailing inserts via splitIntoLines", () => {
-		const inner = new OriginalSource("a", "x.js");
-		const src = new ReplaceSource(inner);
-		src.insert(1, "B\nC");
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk) => chunks.push(chunk),
-			() => {},
-			() => {},
-		);
-		assert.strictEqual(src.source(), "aB\nC");
-		// splitIntoLines("B\nC") returns ["B\n", "C"] — both should be
-		// emitted as separate chunks rather than coalesced.
-		assert.ok(chunks.includes("B\n"));
-		assert.ok(chunks.includes("C"));
-	});
-
-	it("streamChunks() handles empty replacement without emitting a zero-length chunk", () => {
-		const inner = new OriginalSource("abcdef", "x.js");
-		const src = new ReplaceSource(inner);
-		src.replace(2, 3, "");
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk) => chunks.push(chunk),
-			() => {},
-			() => {},
-		);
-		assert.strictEqual(src.source(), "abef");
-		assert.strictEqual(
-			chunks.every((c) => c === undefined || c.length > 0),
-			true,
-		);
-	});
-
-	it("streamChunks() pads sourceContents for multi-source inner (sourceIndex > 0)", () => {
-		// Wrap a SourceMapSource that has multiple sources. The
-		// streamChunks `onSource` callback gets called with sourceIndex
-		// values > 0, exercising the `while (sourceContents.length < i)`
-		// padding loop on line ~515.
+	it("keeps all sources in a multi-source replacement map", () => {
 		const innerMap = {
 			version: 3,
 			file: "out.js",
@@ -614,25 +510,4 @@ export default function StaticPage(_ref) {
 		]);
 	});
 
-	it("streamChunks() tracks generated columns across multiple replacements on one line", () => {
-		const inner = new OriginalSource("aaaaa", "x.js");
-		const src = new ReplaceSource(inner);
-		src.replace(0, 0, "BBBBB");
-		src.replace(2, 2, "CC");
-		assert.strictEqual(src.source(), "BBBBBaCCaa");
-		const chunks = [];
-		src.streamChunks(
-			{},
-			(chunk, gl, gc) => chunks.push([chunk, gl, gc]),
-			() => {},
-			() => {},
-		);
-		const lineOneCols = chunks
-			.filter(([, gl]) => gl === 1)
-			.map(([, , gc]) => gc);
-		assert.deepStrictEqual(
-			lineOneCols,
-			[...lineOneCols].sort((a, b) => a - b),
-		);
-	});
 });
