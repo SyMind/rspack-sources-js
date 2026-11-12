@@ -1,6 +1,6 @@
 # 第三方代码声明
 
-`lib/` 中的 Source 类和 helpers 从 webpack-sources v3.6.0（提交 `4f49c304ef1b105f52dac6f630ab9d90b0c48088`）迁移为 TypeScript；构建产物位于 `dist/`。保留源文件中的作者声明，相关代码遵循以下上游 MIT 许可。
+`src/` 中的 Source 类和 helpers 从 webpack-sources v3.6.0（提交 `4f49c304ef1b105f52dac6f630ab9d90b0c48088`）迁移为 TypeScript；构建产物位于 `lib/`。保留源文件中的作者声明，相关代码遵循以下上游 MIT 许可。
 
 MIT License
 

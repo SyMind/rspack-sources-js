@@ -11,7 +11,7 @@
     "test:types": "pnpm run build:js && tsc -p test/types/tsconfig.json",
     "test:local": "node --test test/*.test.cjs",
     "test:webpack-sources": "node --require ./test/webpack-sources/helpers/validate-mappings.js --test --test-reporter=dot \"test/webpack-sources/*.js\"",
-    "build:js": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build:js": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "bench:validate": "pnpm run build:js && node benchmark/replay.mjs",
     "bench:validate:ci": "pnpm run build:js && node benchmark/replay.mjs --ci",
     "bench:list": "node benchmark/run.mjs --list",
@@ -27,22 +27,22 @@
     "bench:raw:walltime": "codspeed run --mode walltime -- node --hash-seed=1 --random-seed=1 --interpreted-frames-native-stack --allow-natives-syntax --expose-gc benchmark/raw-constructor.mjs"
   },
   "packageManager": "pnpm@11.10.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
       "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
+        "types": "./lib/index.d.mts",
+        "default": "./lib/index.mjs"
       },
       "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "types": "./lib/index.d.ts",
+        "default": "./lib/index.js"
       }
     }
   },
   "files": [
-    "dist",
+    "lib",
     "native/*.node",
     "README.md",
     "THIRD_PARTY_NOTICES.md"

@@ -1,5 +1,5 @@
 'use strict';
-const binding = require('../dist/binding');
+const binding = require('../lib/binding');
 
 module.exports = {
   restoreOriginal(api, fields) {

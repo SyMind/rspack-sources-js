@@ -3,11 +3,11 @@
 const assert = require("assert");
 const { describe, it } = require("node:test");
 const { OriginalSource } = require("../..");
-const { originalPositionFor } = require("../../dist/helpers/sourceMap");
+const { originalPositionFor } = require("../../lib/helpers/sourceMap");
 
 // Line 1: column 0 -> a.js 1:0, column 4 -> a.js 1:4 named `foo`.
 // Line 2: column 2 -> a.js 2:4, column 4 -> a segment with no source.
-/** @type {import("../../dist/Source").RawSourceMap} */
+/** @type {import("../../lib/Source").RawSourceMap} */
 const map = {
 	version: 3,
 	file: "bundle.js",
@@ -64,7 +64,7 @@ describe("sourceMap.originalPositionFor", () => {
 
 	it("should ignore indexes past the end of sources and names", () => {
 		// Line 1 points at source 1 and name 1, which neither list has.
-		/** @type {import("../../dist/Source").RawSourceMap} */
+		/** @type {import("../../lib/Source").RawSourceMap} */
 		const malformed = { ...map, mappings: "ACAAC" };
 		assert.strictEqual(originalPositionFor(malformed, 1, 0), null);
 		assert.deepStrictEqual(
@@ -96,7 +96,7 @@ describe("sourceMap.originalPositionFor", () => {
 
 	it("should read back a map webpack-sources generated", () => {
 		// One mapping per line, so any column resolves to the line's start.
-		const generated = /** @type {import("../../dist/Source").RawSourceMap} */ (
+		const generated = /** @type {import("../../lib/Source").RawSourceMap} */ (
 			new OriginalSource("const a = 1;\nconst b = 2;\n", "file.js").map()
 		);
 		assert.deepStrictEqual(originalPositionFor(generated, 2, 6), {

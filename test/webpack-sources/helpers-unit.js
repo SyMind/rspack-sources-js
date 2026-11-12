@@ -14,7 +14,7 @@ const {
 	exitStringInterningRange,
 	internString,
 	isDualStringBufferCachingEnabled,
-} = require("../../dist/helpers/stringBufferUtils");
+} = require("../../lib/helpers/stringBufferUtils");
 
 describe("getSource", () => {
 	const baseMap = {

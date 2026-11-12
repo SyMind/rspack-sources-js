@@ -5,8 +5,8 @@ import { withCodSpeed } from '@codspeed/tinybench-plugin';
 import { getCodspeedRunnerMode, getV8Flags } from '@codspeed/core';
 
 const require = createRequire(import.meta.url);
-const api = require('../dist');
-const binding = require('../dist/binding');
+const api = require('../lib');
+const binding = require('../lib/binding');
 const filter = process.argv.find(arg => arg.startsWith('--filter='))?.slice(9) ?? '';
 const mode = getCodspeedRunnerMode();
 if (mode === 'disabled') throw new Error('Measurements require CodSpeed.');

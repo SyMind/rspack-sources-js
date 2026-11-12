@@ -17,7 +17,7 @@ pnpm test
 pnpm test:types
 ```
 
-`pnpm build` compiles `lib/` TypeScript into JavaScript and declarations under `dist/`, and produces a release library at `native/rspack_sources.node` for the current host. Use `pnpm build:debug` for a debug native library, or `pnpm build:js` to rebuild only TypeScript. `pnpm test` rebuilds TypeScript before running both test suites. Rebuild after changing Rust code; tests load the existing binary. An absent or incompatible binary produces an explicit loading error.
+`pnpm build` compiles `src/` TypeScript into JavaScript and declarations under `lib/`, and produces a release library at `native/rspack_sources.node` for the current host. Use `pnpm build:debug` for a debug native library, or `pnpm build:js` to rebuild only TypeScript. `pnpm test` rebuilds TypeScript before running both test suites. Rebuild after changing Rust code; tests load the existing binary. An absent or incompatible binary produces an explicit loading error.
 
 ```js
 const { OriginalSource, ReplaceSource, ConcatSource } = require('rspack-sources-js');

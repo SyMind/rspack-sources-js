@@ -57,7 +57,7 @@ pnpm exec node --require ./test/webpack-sources/helpers/validate-mappings.js \
 
 ## 本地 TypeScript 实现
 
-初次迁移时，`lib/` 包含从 v3.6.0 迁入的 Source 类和流式 helpers，并保留 Rust 快照加速。`tsconfig.json` 启用 `strict`，通过 `tsc` 生成 `dist/` 的 CJS / ESM 入口与声明文件。上游测试、mapping writer 校验均加载这些本地编译产物。
+初次迁移引入了 v3.6.0 的 Source 类和流式 helpers，并保留 Rust 快照加速。当前 TypeScript 源码位于 `src/`。`tsconfig.json` 启用 `strict`，通过 `tsc` 生成 `lib/` 的 CJS / ESM 入口与声明文件。上游测试、mapping writer 校验均加载这些本地编译产物。
 
 包已移除原来的参考实现别名及所有 npm 运行时依赖；开发依赖 `webpack-sources@3.6.0` 提供差分对照、参考探针及上述测试工具。原先比较本包与参考包的 `Replacement` 构造器身份断言，改为比较本包与本地模块，避免将两个独立实现错误要求为同一函数对象。上游用例、snapshots 和 fixtures 均未删减或重写。
 

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 test('package loads and maps without loading upstream webpack-sources', async () => {
   const sources = require('rspack-sources-js');
-  const esm = await import('../dist/index.mjs');
+  const esm = await import('../lib/index.mjs');
   assert.strictEqual(esm.default, sources);
   assert.strictEqual(esm.ReplaceSource, sources.ReplaceSource);
 

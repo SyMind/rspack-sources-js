@@ -13,7 +13,7 @@ const {
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("../../dist/helpers/stringBufferUtils");
+} = require("../../lib/helpers/stringBufferUtils");
 
 class TrackedSource extends Source {
 	constructor(source) {

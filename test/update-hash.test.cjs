@@ -4,7 +4,7 @@ const test = require('node:test');
 const {
   Source, RawSource, SourceMapSource, ConcatSource, PrefixSource, ReplaceSource,
   CachedSource, CompatSource, SizeOnlySource, util,
-} = require('../dist');
+} = require('../lib');
 
 function updates(source, onUpdate) {
   const chunks = [];

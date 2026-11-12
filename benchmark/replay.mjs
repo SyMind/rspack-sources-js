@@ -8,9 +8,9 @@ import { verifyReport } from './verification.mjs';
 
 const require = createRequire(import.meta.url);
 export const reference = require('webpack-sources');
-export const implementation = require('../dist/index.js');
+export const implementation = require('../lib/index.js');
 export const nativeState = require('./native-state.cjs');
-const binding = require('../dist/binding.js');
+const binding = require('../lib/binding.js');
 const createHash = require('webpack').util.createHash;
 export const fixtureDirectory = fileURLToPath(new URL('./fixtures/antd-official/', import.meta.url));
 

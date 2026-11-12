@@ -3,8 +3,8 @@
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "rootDir": "lib",
-    "outDir": "dist",
+    "rootDir": "src",
+    "outDir": "lib",
     "strict": true,
     "declaration": true,
     "noEmitOnError": true,
@@ -17,7 +17,7 @@
     ]
   },
   "include": [
-    "lib/**/*.ts",
-    "lib/**/*.mts"
+    "src/**/*.ts",
+    "src/**/*.mts"
   ]
 }

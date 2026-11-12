@@ -1,6 +1,6 @@
 node_modules/
 target/
-dist/
+/lib/
 *.node
 .DS_Store
 

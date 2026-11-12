@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-/** @typedef {import("../../dist/Source").RawSourceMap} RawSourceMap */
+/** @typedef {import("../../lib/Source").RawSourceMap} RawSourceMap */
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -23,7 +23,7 @@ const {
 	enableDualStringBufferCaching,
 	enterStringInterningRange,
 	exitStringInterningRange,
-} = require("../../dist/helpers/stringBufferUtils");
+} = require("../../lib/helpers/stringBufferUtils");
 const { withReadableMappings } = require("./helpers");
 
 for (const enableMemoryOptimizations of [false, true]) {

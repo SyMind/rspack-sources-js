@@ -31,7 +31,7 @@ describe("package-entry", () => {
 
 		assert.strictEqual(
 			util.stringBufferUtils,
-			require("../../dist/helpers/stringBufferUtils"),
+			require("../../lib/helpers/stringBufferUtils"),
 		);
 		assert.strictEqual(
 			typeof util.stringBufferUtils.isDualStringBufferCachingEnabled,
@@ -59,7 +59,7 @@ describe("package-entry", () => {
 	it("should expose util.sourceMap", () => {
 		const { util } = require("../..");
 
-		assert.strictEqual(util.sourceMap, require("../../dist/helpers/sourceMap"));
+		assert.strictEqual(util.sourceMap, require("../../lib/helpers/sourceMap"));
 		assert.strictEqual(typeof util.sourceMap.originalPositionFor, "function");
 	});
 });

@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
-const api = require('../dist');
-const binding = require('../dist/binding');
+const api = require('../lib');
+const binding = require('../lib/binding');
 
 test('constructors bind native state before the first read', () => {
   binding.debugSourceStats(true);
@@ -312,7 +312,7 @@ test('fixture restoration also requires a uniquely owned OriginalSource', () => 
 test('JS parents retain the original child wrappers and cycles remain collectible', () => {
   const script = `
     const assert = require('node:assert/strict');
-    const api = require(${JSON.stringify(require.resolve('../dist'))});
+    const api = require(${JSON.stringify(require.resolve('../lib'))});
     const tick = () => new Promise(resolve => setImmediate(resolve));
     (async () => {
       let original = new api.OriginalSource('edited', 'input.js');
@@ -379,7 +379,7 @@ test('external backing stores keep the native graph alive until the last view is
   const script = `
     const assert = require('node:assert/strict');
     const { setImmediate: tick } = require('node:timers/promises');
-    const { CachedSource, RawSource, ReplaceSource } = require(${JSON.stringify(require.resolve('../dist'))});
+    const { CachedSource, RawSource, ReplaceSource } = require(${JSON.stringify(require.resolve('../lib'))});
     async function collectUntil(predicate) {
       for (let i = 0; i < 50; i++) {
         await tick();

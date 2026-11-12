@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const reference = require('webpack-sources');
-const implementation = require('../dist/index.js');
+const implementation = require('../lib/index.js');
 const nativeState = require('./native-state.cjs');
 const { encodeGraph, restoreGraph, UnsupportedGraph } = require('./graph.cjs');
 
