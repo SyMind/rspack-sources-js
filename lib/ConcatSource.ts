@@ -2,7 +2,8 @@
   MIT License http://www.opensource.org/licenses/mit-license.php
   Author Tobias Koppers @sokra
 */
-import { Source } from './Source';
+import { Source, type HashLike, type MapOptions, type RawSourceMap, type SourceAndMap, type SourceValue } from './Source';
+import type { SourceLike } from './CompatSource';
 import { RawSource } from './RawSource';
 import binding = require('./binding');
 
@@ -65,10 +66,4 @@ export class ConcatSource extends Source {
 export declare namespace ConcatSource {
   export { SourceLike, HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, Child, };
 }
-type SourceLike = import("./CompatSource").SourceLike;
-type HashLike = import("./Source").HashLike;
-type MapOptions = import("./Source").MapOptions;
-type RawSourceMap = import("./Source").RawSourceMap;
-type SourceAndMap = import("./Source").SourceAndMap;
-type SourceValue = import("./Source").SourceValue;
 export type Child = string | Source;

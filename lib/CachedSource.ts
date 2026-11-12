@@ -2,7 +2,7 @@
   MIT License http://www.opensource.org/licenses/mit-license.php
   Author Tobias Koppers @sokra
 */
-import { Source } from './Source';
+import { Source, type HashLike, type MapOptions, type RawSourceMap, type SourceAndMap, type SourceValue } from './Source';
 import binding = require('./binding');
 
 type HashUpdates = (string | Buffer)[];
@@ -82,8 +82,3 @@ export class CachedSource extends Source {
 export declare namespace CachedSource {
   export { HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, };
 }
-type HashLike = import("./Source").HashLike;
-type MapOptions = import("./Source").MapOptions;
-type RawSourceMap = import("./Source").RawSourceMap;
-type SourceAndMap = import("./Source").SourceAndMap;
-type SourceValue = import("./Source").SourceValue;

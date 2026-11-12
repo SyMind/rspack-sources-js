@@ -2,13 +2,11 @@
 
 const assert = require("assert");
 const { afterEach, describe, it } = require("node:test");
-const createMappingsSerializer = require("../../dist/helpers/createMappingsSerializer");
-const {
-	createMappingsWriter,
-} = require("../../dist/helpers/createMappingsSerializer");
-const getSource = require("../../dist/helpers/getSource");
-const readMappings = require("../../dist/helpers/readMappings");
-const splitIntoLines = require("../../dist/helpers/splitIntoLines");
+const createMappingsSerializer = require("webpack-sources/lib/helpers/createMappingsSerializer");
+const { createMappingsWriter } = createMappingsSerializer;
+const getSource = require("webpack-sources/lib/helpers/getSource");
+const readMappings = require("webpack-sources/lib/helpers/readMappings");
+const splitIntoLines = require("webpack-sources/lib/helpers/splitIntoLines");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,

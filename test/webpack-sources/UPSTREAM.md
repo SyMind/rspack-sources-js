@@ -15,7 +15,7 @@
 1. 上游包入口 `require("../")` 改为本项目根入口 `require("../..")`。
 2. 上游私有 Source 模块导入改为本项目公开的同名 Source 导出，包含 `Fuzzy.js` 中的所有组合。
 3. `package-entry.js` 原本比较包入口与私有 Source 模块；本项目未提供这些私有模块，因此改为比较根入口与包的自引用 `require("rspack-sources-js")`，检查 `main` / `exports` 的解析与重复读取身份。
-4. helper 导入及相关 JSDoc 类型路径改为本项目的 `dist/...`。测试直接覆盖 `lib/` TypeScript 编译出的本地实现；helper 单元测试的通过不代表 Rust 内部 helpers 已被直接测试。
+4. `stringBufferUtils` 用例验证本包的公开工具。映射读写、`getSource` 和 `splitIntoLines` 仅供测试使用，直接从开发依赖 `webpack-sources@3.6.0` 导入。这四个 helper 的单元测试覆盖上游 JS 实现。
 5. `helpers/validate-mappings.js` 通过 `--require` 在测试加载前替换同一 JS mappings writer，保留上游的逐项映射校验。Rust 生成的映射仍由各用例的预期值、原始快照、SourceMapConsumer 和 sourcemap-validator 校验。
 6. 缓存用例通过公开方法检查返回值、对象身份或重新计算次数。CachedSource 的 map 和 hash 用例通过原始 Source 的调用次数和 `updateHash()` 的输出验证缓存行为。ReplaceSource 的包装对象身份通过公开 `original()` 检查。替换顺序通过 `source()` 和 `getReplacements()` 返回的独立快照验证，排序在 Rust 内完成。下文通过记录属于此前版本。
 
@@ -59,7 +59,7 @@ pnpm exec node --require ./test/webpack-sources/helpers/validate-mappings.js \
 
 初次迁移时，`lib/` 包含从 v3.6.0 迁入的 Source 类和流式 helpers，并保留 Rust 快照加速。`tsconfig.json` 启用 `strict`，通过 `tsc` 生成 `dist/` 的 CJS / ESM 入口与声明文件。上游测试、mapping writer 校验均加载这些本地编译产物。
 
-包已移除原来的参考实现别名及所有 npm 运行时依赖；开发依赖 `webpack-sources@3.6.0` 仅供 `test/sources.test.cjs` 的独立差分对照和 `probe:reference` 使用。原先比较本包与参考包的 `Replacement` 构造器身份断言，改为比较本包与本地模块，避免将两个独立实现错误要求为同一函数对象。上游用例、snapshots 和 fixtures 均未删减或重写。
+包已移除原来的参考实现别名及所有 npm 运行时依赖；开发依赖 `webpack-sources@3.6.0` 提供差分对照、参考探针及上述测试工具。原先比较本包与参考包的 `Replacement` 构造器身份断言，改为比较本包与本地模块，避免将两个独立实现错误要求为同一函数对象。上游用例、snapshots 和 fixtures 均未删减或重写。
 
 本地 TypeScript 迁移验证：`pnpm install --frozen-lockfile --ignore-scripts`、`pnpm build`、`pnpm test`、`pnpm test:types`、`pnpm probe:reference` 通过。当时为 55 项本地测试 + 89,977 项上游测试，合计 90,032 项。新增隔离测试验证流式读取与原生 map 不会加载上游包；原始 snapshots / fixtures 仍逐字节一致。
 

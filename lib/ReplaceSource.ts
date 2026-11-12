@@ -2,7 +2,7 @@
   MIT License http://www.opensource.org/licenses/mit-license.php
   Author Tobias Koppers @sokra
 */
-import { Source } from './Source';
+import { Source, type HashLike, type MapOptions, type RawSourceMap, type SourceAndMap, type SourceValue } from './Source';
 import binding = require('./binding');
 
 /** An independent copy of an edit returned by getReplacements(). */
@@ -92,8 +92,3 @@ ReplaceSource.Replacement = Replacement;
 export declare namespace ReplaceSource {
   export { Replacement, HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, };
 }
-type HashLike = import("./Source").HashLike;
-type MapOptions = import("./Source").MapOptions;
-type RawSourceMap = import("./Source").RawSourceMap;
-type SourceAndMap = import("./Source").SourceAndMap;
-type SourceValue = import("./Source").SourceValue;

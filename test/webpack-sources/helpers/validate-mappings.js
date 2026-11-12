@@ -1,15 +1,9 @@
 "use strict";
 
-// Loaded before every test file (`--require` for `node --test`, `setupFiles`
-// for Jest): every mapping the library writes is checked, so a stream that
-// reports mappings out of order or with invalid fields fails the test that
-// produced it instead of silently yielding a broken `mappings` string.
-//
-// The library takes `createMappingsWriter` from this module when it loads, so
-// replacing the export here, before any library file is required, puts the
-// check in front of every writer.
+// Validate mappings emitted by the upstream JS writer used in these tests.
+// The native Source implementations generate their mappings in Rust.
 
-const mappingsSerializer = require("../../../dist/helpers/createMappingsSerializer");
+const mappingsSerializer = require("webpack-sources/lib/helpers/createMappingsSerializer");
 
 const { createMappingsWriter } = mappingsSerializer;
 

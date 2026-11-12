@@ -9,7 +9,7 @@ export class Source {
 
   /** Treat the returned bytes as read-only. Use Buffer.from(source.buffer()) for a writable copy. */
   buffer(): Buffer {
-    const source: string | Buffer = this.source();
+    const source = this.source();
     if (Buffer.isBuffer(source))
       return source;
     return Buffer.from(source, "utf8");
@@ -19,8 +19,7 @@ export class Source {
     return this.buffer().length;
   }
 
-  // eslint-disable-next-line no-unused-vars
-  map(options?: MapOptions | undefined): RawSourceMap | null {
+  map(_options?: MapOptions): RawSourceMap | null {
     return null;
   }
 
@@ -31,11 +30,9 @@ export class Source {
     };
   }
 
-  // eslint-disable-next-line no-unused-vars
-  updateHash(hash: HashLike): void {
+  updateHash(_hash: HashLike): void {
     throw new Error("Abstract");
   }
-
 }
 
 export declare namespace Source {

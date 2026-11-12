@@ -17,7 +17,7 @@ const { ConcatSource } = require("../..");
 const { PrefixSource } = require("../..");
 const { ReplaceSource } = require("../..");
 const { CachedSource } = require("../..");
-const createMappingsSerializer = require("../../dist/helpers/createMappingsSerializer");
+const createMappingsSerializer = require("webpack-sources/lib/helpers/createMappingsSerializer");
 const {
 	disableDualStringBufferCaching,
 	enableDualStringBufferCaching,

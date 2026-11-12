@@ -2,7 +2,7 @@
   MIT License http://www.opensource.org/licenses/mit-license.php
   Author Tobias Koppers @sokra
 */
-import { Source } from './Source';
+import { Source, type HashLike, type MapOptions, type RawSourceMap, type SourceValue } from './Source';
 import binding = require('./binding');
 
 export class RawSource extends Source {
@@ -44,7 +44,3 @@ export class RawSource extends Source {
 export declare namespace RawSource {
   export { HashLike, MapOptions, RawSourceMap, SourceValue, };
 }
-type HashLike = import("./Source").HashLike;
-type MapOptions = import("./Source").MapOptions;
-type RawSourceMap = import("./Source").RawSourceMap;
-type SourceValue = import("./Source").SourceValue;

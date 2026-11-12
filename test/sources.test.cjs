@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const ref = require('webpack-sources');
 const api = require('../dist/index.js');
-const planner = require('../dist/planner.js');
 const binding = require('../dist/binding.js');
 
 function digest(source) {
@@ -15,11 +14,11 @@ function digest(source) {
 function compare(build, { native = true } = {}) {
   for (const options of [undefined, {}, { columns: true }, { columns: false }]) {
     const a = build(api), b = build(ref);
-    planner.resetStats();
+    binding.debugSourceStats(true);
     assert.deepStrictEqual(a.map(options), b.map(options));
     assert.equal(JSON.stringify(a.map(options)), JSON.stringify(b.map(options)));
     assert.deepStrictEqual(a.sourceAndMap(options), b.sourceAndMap(options));
-    if (native) assert.ok(planner.getStats().nativeReads > 0, 'fixture must exercise Rust');
+    if (native) assert.ok(binding.debugSourceStats().nativeReads > 0, 'fixture must exercise Rust');
     assert.equal(a.source(), b.source());
     assert.deepStrictEqual(a.buffer(), b.buffer());
     assert.equal(a.size(), b.size());
@@ -48,7 +47,7 @@ test('sharing a child rejects edits before and after native reads', () => {
   child.replace(0, 0, 'X');
   const parent = new api.ConcatSource('[', child, ']');
   assert.throws(() => child.insert(0, 'x'), /Cannot modify shared ReplaceSource/);
-  const held = planner.prepare(parent);
+  const held = binding.debugSourceSnapshot(parent);
   assert.equal(parent.sourceAndMap().source, '[Xbc]');
   assert.throws(() => child.replace(1, 1, 'y'), /Cannot modify shared ReplaceSource/);
   assert.equal(child.getReplacements().length, 1);
@@ -61,9 +60,9 @@ test('sharing a child rejects edits before and after native reads', () => {
 
 test('successive edits apply to the uniquely owned source', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('a'.repeat(1000), 'in.js'));
-  planner.resetStats();
+  binding.debugSourceStats(true);
   for (let i = 0; i < 1000; i++) r.replace(i, i, 'b');
-  assert.equal(planner.getStats().mutations, 1000);
+  assert.equal(binding.debugSourceStats().mutations, 1000);
   assert.equal(r.sourceAndMap().source, 'b'.repeat(1000));
 });
 
@@ -123,9 +122,9 @@ test('CachedSource retains the source and map across a rejected edit', () => {
   const cached = new api.CachedSource(r);
   const before = cached.sourceAndMap();
   assert.throws(() => r.replace(0, 0, 'X'), /Cannot modify shared ReplaceSource/);
-  planner.resetStats();
+  binding.debugSourceStats(true);
   assert.deepStrictEqual(cached.sourceAndMap(), before);
-  assert.equal(planner.getStats().nativeReads, 0);
+  assert.equal(binding.debugSourceStats().nativeReads, 0);
   assert.equal(r.source(), 'abc');
   assert.strictEqual(cached.map(), before.map);
 });
@@ -139,12 +138,12 @@ test('OriginalSource maps Buffer and UTF-16 inputs in Rust', () => {
     const source = new api.OriginalSource(value, name);
     const reference = new ref.OriginalSource(value, name);
     if (Buffer.isBuffer(value)) value[0] = 0xff;
-    planner.resetStats();
+    binding.debugSourceStats(true);
     assert.deepEqual(source.map({ get columns() { return true; } }), reference.map());
     if (Buffer.isBuffer(value)) value.fill(0);
     assert.deepEqual(source.sourceAndMap({ columns: false }), reference.sourceAndMap({ columns: false }));
-    assert.equal(planner.getStats().nativeReads, 2);
-    assert.equal(planner.getStats().fallbacks, 0);
+    assert.equal(binding.debugSourceStats().nativeReads, 2);
+    assert.equal(binding.debugSourceStats().fallbacks, 0);
   }
 });
 
@@ -162,7 +161,7 @@ test('overlapping edits and insert after replacement use JS semantics', () => co
 test('copying the Buffer passed to a hash preserves the OriginalSource bytes', () => {
   const text = 'a中😀';
   const source = new api.OriginalSource(text, 'input.js');
-  const snapshot = planner.prepare(source);
+  const snapshot = binding.debugSourceSnapshot(source);
   const chunks = [];
   source.updateHash({ update(value) { chunks.push(value); return this; } });
   assert.deepStrictEqual(chunks, ['OriginalSource', Buffer.from(text), 'input.js']);
@@ -181,7 +180,7 @@ test('RawSource and SourceMapSource hash Buffers match their prepared snapshots'
   const text = 'abc😀';
   const map = { version: 3, sources: ['in.js'], sourcesContent: [text], names: [], mappings: 'AAAA' };
   for (const source of [new api.RawSource(text), new api.SourceMapSource(text, 'in.js', map)]) {
-    const snapshot = planner.prepare(source);
+    const snapshot = binding.debugSourceSnapshot(source);
     const chunks = [];
     source.updateHash({ update(value) { chunks.push(value); return this; } });
     const bytes = chunks[1];
@@ -202,9 +201,9 @@ test('mutable Buffer follows reference method-local string caching', () => {
     data[0] = 88;
     return { before, after: p.sourceAndMap(), raw: raw.source(), buffer: raw.buffer() };
   }
-  planner.resetStats();
+  binding.debugSourceStats(true);
   assert.deepStrictEqual(run(api), run(ref));
-  assert.ok(planner.getStats().fallbacks > 0);
+  assert.ok(binding.debugSourceStats().fallbacks > 0);
 });
 
 test('custom Sources participate in composite source maps', () => {
