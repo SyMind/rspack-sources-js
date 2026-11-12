@@ -6,6 +6,19 @@ const implementation = require('../dist/index.js');
 const nativeState = require('./native-state.cjs');
 const { encodeGraph, restoreGraph, UnsupportedGraph } = require('./graph.cjs');
 
+test('native replay can read a CachedSource captured with either upstream byte cache', () => {
+  for (const first of ['buffer', 'buffers']) {
+    const source = new reference.CachedSource(new reference.ConcatSource(
+      new reference.RawSource('a'), new reference.RawSource('b'),
+    ));
+    source[first]();
+    source.buffer();
+    source.buffers();
+    const replay = restoreGraph(encodeGraph(source, reference), implementation, nativeState);
+    assert.deepEqual(replay.buffer(), source.buffer());
+  }
+});
+
 test('replay preserves shared Source identity, replacement positions, buffers and populated map caches', () => {
   const original = new reference.OriginalSource('A😀B\n', 'unicode.js');
   const replaced = new reference.ReplaceSource(original);

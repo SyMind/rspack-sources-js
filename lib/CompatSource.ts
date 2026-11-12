@@ -70,10 +70,6 @@ export type SourceLike = {
    */
   buffer?: (() => Buffer) | undefined;
   /**
-   * buffers
-   */
-  buffers?: (() => Buffer[]) | undefined;
-  /**
    * size
    */
   size?: (() => number) | undefined;

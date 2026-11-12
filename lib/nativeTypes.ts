@@ -74,7 +74,6 @@ export interface NativeBinding {
   concatSource(receiver: object): Source.SourceValue;
   concatMap(receiver: object, columns: boolean): Source.RawSourceMap | null;
   concatSourceAndMap(receiver: object, columns: boolean): Source.SourceAndMap;
-  concatBuffers(receiver: object): Buffer[];
   concatSize(receiver: object): number;
   concatBuffer(receiver: object): Buffer;
 

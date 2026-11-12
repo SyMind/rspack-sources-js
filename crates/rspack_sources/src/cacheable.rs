@@ -169,6 +169,12 @@ pub enum CacheableSource {
     #[rkyv(omit_bounds)]
     inner: Box<CacheableSource>,
   },
+  CompatBuffers {
+    #[rkyv(omit_bounds)]
+    inner: Box<CacheableSource>,
+    #[rkyv(omit_bounds)]
+    bytes: Box<CacheableSource>,
+  },
 }
 
 /// Convert a [`Source`] trait object into a serializable [`CacheableSource`].
@@ -204,8 +210,13 @@ pub fn to_cacheable(source: &dyn Source) -> CacheableSource {
     return CacheableSource::SizeOnly { size: s.size() };
   }
   if let Some(s) = source.as_any().downcast_ref::<CompatSource>() {
-    return CacheableSource::Compat {
-      inner: Box::new(to_cacheable(s.inner().as_ref())),
+    let inner = Box::new(to_cacheable(s.inner().as_ref()));
+    return match &s.byte_source {
+      Some(bytes) => CacheableSource::CompatBuffers {
+        inner,
+        bytes: Box::new(to_cacheable(bytes.as_ref())),
+      },
+      None => CacheableSource::Compat { inner },
     };
   }
 
@@ -297,6 +308,9 @@ pub fn from_cacheable(cacheable: CacheableSource) -> SourceRef {
     }
     CacheableSource::SizeOnly { size } => SizeOnlySource(size).boxed(),
     CacheableSource::Compat { inner } => CompatSource::new(from_cacheable(*inner)).boxed(),
+    CacheableSource::CompatBuffers { inner, bytes } => {
+      CompatSource::with_byte_source(from_cacheable(*inner), from_cacheable(*bytes)).boxed()
+    }
     CacheableSource::RawBuffer { buffer } => RawBufferSource::from(buffer).boxed(),
     CacheableSource::RawString { value } => RawStringSource::from(value).boxed(),
     CacheableSource::Original { value, name } => OriginalSource::new(value, name).boxed(),

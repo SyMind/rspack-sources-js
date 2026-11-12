@@ -20,6 +20,7 @@
 6. 缓存用例通过公开方法检查返回值、对象身份或重新计算次数。CachedSource 的 map 和 hash 用例通过原始 Source 的调用次数和 `updateHash()` 的输出验证缓存行为。ReplaceSource 的包装对象身份通过公开 `original()` 检查。替换顺序通过 `source()` 和 `getReplacements()` 返回的独立快照验证，排序在 Rust 内完成。下文通过记录属于此前版本。
 
 7. RawSource / OriginalSource 的 `updateHash` 按指定 checkout 调用 `this.buffer()`。对应断言检查 hash 收到的 Buffer、更新顺序及双缓存策略。CachedSource 在实例内记录和回放 hash 分段。构造器只接受原始 Source。依赖函数工厂、上游缓存快照导出或构造器恢复的用例标为 skip。[Raw / Original 哈希基线](https://github.com/webpack/webpack-sources/blob/1aa76ca9743cb630e00a0077a18030239126086c/lib/OriginalSource.js#L251) · [CachedSource 的 hash 导出](https://github.com/webpack/webpack-sources/blob/b501a3a172bce3f8424ae99838fdede806407fb2/lib/CachedSource.js#L70)
+8. 本包已移除 JS `Source.buffers()`。专测该方法的上游用例标为 skip，组合用例继续验证 `buffer()` 和其他受支持的方法。
 
 8. 本项目暂不提供 JS `streamChunks()` 和 source map scopes 提案相关 API。已排除上游直接检查流式回调的用例及 scopes.js。普通 `map()` 和 `sourceAndMap()` 仍参与快照和组合测试。
 

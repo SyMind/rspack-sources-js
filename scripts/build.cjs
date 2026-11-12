@@ -4,7 +4,6 @@ const { copyFileSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const args = ['build', '--locked', '-p', 'rspack_sources_js', '--message-format=json-render-diagnostics'];
-if (process.env.RSPACK_SOURCES_FEATURES) args.push('--features', process.env.RSPACK_SOURCES_FEATURES);
 if (!process.argv.includes('--debug')) args.push('--release');
 const result = spawnSync('cargo', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 if (result.stderr) process.stderr.write(result.stderr);

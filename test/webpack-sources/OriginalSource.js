@@ -101,7 +101,7 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.strictEqual(source.getName(), "file.js");
 		});
 
-		it("should expose buffers() returning a single-entry Buffer[]", () => {
+		it.skip("should expose buffers() returning a single-entry Buffer[]", () => {
 			const content = "Line1\nLine2\n";
 			const source = new OriginalSource(content, "file.js");
 			const buffers = source.buffers();
@@ -110,7 +110,7 @@ for (const enableMemoryOptimizations of [false, true]) {
 			assert.deepStrictEqual(buffers[0], Buffer.from(content));
 		});
 
-		it("should reuse the underlying buffer in buffers() when constructed from a Buffer", () => {
+		it.skip("should reuse the underlying buffer in buffers() when constructed from a Buffer", () => {
 			const buffer = Buffer.from("Line1\nLine2\n");
 			const source = new OriginalSource(buffer, "file.js");
 			const buffers = source.buffers();

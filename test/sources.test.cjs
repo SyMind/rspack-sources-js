@@ -24,7 +24,6 @@ function compare(build, { native = true } = {}) {
     assert.deepStrictEqual(a.buffer(), b.buffer());
     assert.equal(a.size(), b.size());
     assert.equal(digest(a), digest(b));
-    assert.deepStrictEqual(a.buffers(), b.buffers());
   }
 }
 

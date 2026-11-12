@@ -126,18 +126,3 @@ pub fn concat_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Val
 pub fn concat_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
     super::source_and_map(&buffer_owner_of::<ConcatSourceBinding>(receiver)?, columns)
 }
-
-#[napi(catch_unwind)]
-pub fn concat_buffers(receiver: Object<'_>) -> Result<Vec<Buffer>> {
-    let bound = source_of::<ConcatSourceBinding>(receiver)?;
-    let concat = bound
-        .as_ref()
-        .as_any()
-        .downcast_ref::<ConcatSource>()
-        .expect("ConcatSource binding");
-    Ok(concat
-        .children()
-        .iter()
-        .map(|child| child.buffer().into_owned().into())
-        .collect())
-}

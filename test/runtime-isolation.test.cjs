@@ -12,6 +12,7 @@ test('package loads and maps without loading upstream webpack-sources', async ()
   for (const type of ['Source', 'RawSource', 'OriginalSource', 'SourceMapSource', 'ReplaceSource',
     'ConcatSource', 'CachedSource', 'PrefixSource', 'SizeOnlySource', 'CompatSource']) {
     assert.equal('streamChunks' in sources[type].prototype, false, type);
+    assert.equal('buffers' in sources[type].prototype, false, type);
   }
 
   const edited = new sources.ReplaceSource(new sources.OriginalSource('ab\n', 'input.js'));

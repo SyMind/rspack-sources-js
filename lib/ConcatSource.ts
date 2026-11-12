@@ -38,10 +38,6 @@ export class ConcatSource extends Source {
     return binding.concatBuffer(this);
   }
 
-  buffers(): Buffer<ArrayBufferLike>[] {
-    return binding.concatBuffers(this);
-  }
-
   source(): SourceValue {
     return binding.concatSource(this);
   }

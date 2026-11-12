@@ -9,6 +9,7 @@ module.exports = {
   },
   restoreCached(api, fields) {
     const source = new api.CachedSource(fields._source);
+    if (fields._cachedBuffer !== undefined) source.buffer();
     if (fields._cachedSource !== undefined || fields._cachedSourceType !== undefined) source.source();
     if (fields._cachedSize !== undefined) source.size();
     for (const key of fields._cachedMaps?.keys() ?? []) {

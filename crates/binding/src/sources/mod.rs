@@ -12,7 +12,7 @@ use crate::{invalid, maps::parse_map, output_buffer::OutputBuffer, source_bindin
 use napi::{Result, ValueType, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{
-    MapOptions, RawBufferSource, RawStringSource, Source, SourceExt, SourceMapSource,
+    CompatSource, MapOptions, RawBufferSource, RawStringSource, Source, SourceExt, SourceMapSource,
     SourceRef, WithoutOriginalOptions,
 };
 use serde_json::Value;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 pub(crate) fn text(value: Unknown<'_>) -> Result<String> {
     if value.is_buffer()? {
-        Ok(String::from_utf8_lossy(&unsafe { value.cast::<BufferSlice>()? }).into_owned())
+        Ok(String::from_utf8_lossy(&unsafe { value.cast::<Buffer>()? }).into_owned())
     } else if value.get_type()? == ValueType::String {
         unsafe { value.cast::<String>() }
     } else {
@@ -30,7 +30,7 @@ pub(crate) fn text(value: Unknown<'_>) -> Result<String> {
 
 pub(crate) fn raw_input(value: Unknown<'_>, convert_to_string: bool) -> Result<SourceRef> {
     if value.is_buffer()? && !convert_to_string {
-        Ok(RawBufferSource::from(unsafe { value.cast::<BufferSlice>()? }.to_vec()).boxed())
+        Ok(RawBufferSource::from(unsafe { value.cast::<Buffer>()? }.to_vec()).boxed())
     } else {
         Ok(RawStringSource::from(text(value)?).boxed())
     }
@@ -61,15 +61,21 @@ pub(crate) fn bound_input(value: Unknown<'_>) -> Result<SourceRef> {
             },
         )
     };
-    match map {
-        Some(source_map) => Ok(SourceMapSource::new(WithoutOriginalOptions {
+    let inner = match map {
+        Some(source_map) => SourceMapSource::new(WithoutOriginalOptions {
             value: text(content)?,
             name: source_map.file().unwrap_or_default().to_owned(),
             source_map,
         })
-        .boxed()),
-        None => raw_input(content, false),
+        .boxed(),
+        None => raw_input(content, false)?,
+    };
+    let buffer: Option<Function<(), Buffer>> = object.get_named_property("buffer")?;
+    if let Some(buffer) = buffer {
+        let bytes = RawBufferSource::from(buffer.apply(object, ())?.to_vec());
+        return Ok(CompatSource::with_byte_source(inner, bytes.boxed()).boxed());
     }
+    Ok(inner)
 }
 
 #[napi(object, object_from_js = false)]

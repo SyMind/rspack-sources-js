@@ -9,14 +9,10 @@ export class Source {
 
   /** Treat the returned bytes as read-only. Use Buffer.from(source.buffer()) for a writable copy. */
   buffer(): Buffer {
-    const source = this.source();
+    const source: string | Buffer = this.source();
     if (Buffer.isBuffer(source))
       return source;
     return Buffer.from(source, "utf8");
-  }
-
-  buffers(): Buffer<ArrayBufferLike>[] {
-    return [this.buffer()];
   }
 
   size(): number {

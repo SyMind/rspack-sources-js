@@ -4,7 +4,7 @@ const { mkdirSync, writeFileSync } = require('node:fs');
 const { gzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const sourceKinds = ['RawSource', 'OriginalSource', 'SourceMapSource', 'ConcatSource', 'ReplaceSource', 'CachedSource', 'PrefixSource', 'SizeOnlySource', 'CompatSource', 'Source'];
-const methods = ['source', 'buffer', 'buffers', 'size', 'map', 'sourceAndMap', 'updateHash'];
+const methods = ['source', 'buffer', 'size', 'map', 'sourceAndMap', 'updateHash'];
 
 class CaptureSourcesPlugin {
   constructor(options) { this.options = options; }

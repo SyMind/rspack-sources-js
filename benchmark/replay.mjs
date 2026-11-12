@@ -20,7 +20,7 @@ export function loadCases({ filter = '', mode } = {}) {
     const capture = JSON.parse(gunzipSync(readFileSync(join(fixtureDirectory, name))));
     if (capture.schema !== 1 || capture.webpackSources !== require('webpack-sources/package.json').version) throw new Error('Capture version differs from replay reference');
     if (mode && capture.mode !== mode) continue;
-    records.push(...capture.cases.filter(item => item.method !== 'streamChunks' && item.id.includes(filter)));
+    records.push(...capture.cases.filter(item => item.method !== 'streamChunks' && item.method !== 'buffers' && item.id.includes(filter)));
   }
   if (!records.length) throw new Error(`No captured calls match ${JSON.stringify({ filter, mode })}`);
   return records;

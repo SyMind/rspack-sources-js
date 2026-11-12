@@ -86,6 +86,7 @@ export class ReplaceSource extends Source {
     return binding.replaceSize(this);
   }
 }
+
 ReplaceSource.Replacement = Replacement;
 
 export declare namespace ReplaceSource {

@@ -7,9 +7,6 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
-[features]
-benchmark-legacy-api = []
-
 [dependencies]
 napi = { version = "=3.16.0", default-features = false, features = ["napi8", "serde-json"] }
 napi-derive = "=3.7.0"

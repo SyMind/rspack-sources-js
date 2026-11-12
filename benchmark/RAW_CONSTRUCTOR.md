@@ -1,6 +1,6 @@
 # RawSource 通用入口与专用入口对比
 
-日期：2026-11-11。历史测量结论：**专用 raw_new 的入口成本更低；完整构造的收益更小且受输入大小影响。** 随后按用户要求，生产代码已切换为各 Source 类型的具名入口；此次接口重构仅完成编译检查，未重跑测量，所有改动未提交。
+日期：2026-11-11。历史测量结论：**专用 raw_new 的入口成本更低；完整构造的收益更小且受输入大小影响。** 随后生产代码切换为各 Source 类型的具名入口。2026-11-12 已移除旧通用入口的 benchmark 对照实现，当前脚本只测量 `rawNew` 和公开 `RawSource` 构造器；下文数据对应历史版本。
 
 ## 历史测量对象（接口重构之前）
 
@@ -49,18 +49,16 @@
 
 RawSource 的固定构造协议适合使用专用 raw_new：入口更明确，也减少通用编码成本。大字符串的成本主要在共同的构造工作，接口变化的收益被摊薄。当前结果仅覆盖构造，不代表 source/map、完整 Source 树或 webpack build 的整体加速，也不证明 GC 或内存改善。
 
-上述结果来自切换生产入口之前的同源对照。后续已删除 lib/bridge.ts，生产构造直接调用 binding.rawNew。现脚本用 rawBenchmarkGenericNew 复现旧的 kind/args 协议，两个分支共用 raw::new_node；该对照入口仅在 benchmark-legacy-api Cargo feature 开启时导出，默认构建不包含通用入口。重构还调整了代码组织及字段初始化，旧数字不能直接视为当前实现的性能结果。未运行完整单测或上游套件。
+上述结果来自切换生产入口之前的同源对照。后续已删除 lib/bridge.ts，生产构造直接调用 binding.rawNew。旧的通用 benchmark 对照入口及其 Cargo feature 已删除。重构还调整了代码组织及字段初始化，旧数字对应历史实现。完整单测和上游套件仍暂停。
 
-## 复现
+## 测量当前入口
 
-当前脚本的运行方式如下；这是对新代码的重新测量，不会重现历史二进制的完全相同结果。历史源码快照仍保存在下文位置。先在 Linux 开启专用对照 feature 构建，再执行：
+当前脚本分别测量 `rawNew` 原生入口和公开 `RawSource` 构造器。每项结果为 32 个 Source 的批耗时，接收对象准备与显式 GC 的计时边界沿用前述方式。历史对照的源码快照见下文。运行方式如下。
 
 ~~~sh
-RSPACK_SOURCES_FEATURES=benchmark-legacy-api pnpm build
-pnpm bench:raw:simulation --variant=generic
-pnpm bench:raw:simulation --variant=raw-new
-pnpm bench:raw:walltime --variant=generic
-pnpm bench:raw:walltime --variant=raw-new
+pnpm build
+pnpm bench:raw:simulation
+pnpm bench:raw:walltime
 ~~~
 
 可用 --filter=native-entry 或 --filter=ascii-32B 缩小范围。脚本拒绝在 CodSpeed 外运行。Mac 使用 benchmark/prepare-linux.mjs 创建源码快照，在已有 codspeed-linux 环境构建，避免 Linux .node 覆盖宿主机产物。容器 walltime 需设置 CODSPEED_PROFILER_ENABLED=false CODSPEED_ISOLATION=false。

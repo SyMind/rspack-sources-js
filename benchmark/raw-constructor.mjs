@@ -7,38 +7,13 @@ import { getCodspeedRunnerMode, getV8Flags } from '@codspeed/core';
 const require = createRequire(import.meta.url);
 const api = require('../dist');
 const binding = require('../dist/binding');
-const { internString } = require('../dist/helpers/stringBufferUtils');
-if (typeof binding.rawBenchmarkGenericNew !== 'function') {
-  throw new Error('Build the benchmark control first: RSPACK_SOURCES_FEATURES=benchmark-legacy-api pnpm build');
-}
-const variant = process.argv.find(arg => arg.startsWith('--variant='))?.slice(10) ?? 'generic';
 const filter = process.argv.find(arg => arg.startsWith('--filter='))?.slice(9) ?? '';
-if (!['generic', 'raw-new'].includes(variant)) throw new Error('--variant must be generic or raw-new');
 const mode = getCodspeedRunnerMode();
 if (mode === 'disabled') throw new Error('Measurements require CodSpeed.');
 const missing = getV8Flags().filter(flag => !process.execArgv.includes(flag));
 if (missing.length) throw new Error(`Missing CodSpeed V8 flags: ${missing.join(' ')}`);
 if (typeof global.gc !== 'function') throw new Error('Run with --expose-gc to keep collection outside timed constructor batches.');
 
-// Both wrappers have the same superclass, constructor shape, and string interning.
-// Only the native entry differs. No output conversion or map computation is timed.
-class GenericRawSource extends api.Source {
-  constructor(value, convertToString = false) {
-    super();
-    if (typeof value === 'string') value = internString(value);
-    binding.rawBenchmarkGenericNew(this, 'raw', [value, convertToString]);
-  }
-}
-class DirectRawSource extends api.Source {
-  constructor(value, convertToString = false) {
-    super();
-    if (typeof value === 'string') value = internString(value);
-    binding.rawNew(this, value, convertToString);
-  }
-}
-for (const Class of [GenericRawSource, DirectRawSource]) {
-  Object.setPrototypeOf(Class.prototype, api.RawSource.prototype);
-}
 const fixtures = [
   { name: 'empty-string', value: '', convert: false },
   { name: 'ascii-32B', value: '0123456789abcdef'.repeat(2), convert: false },
@@ -49,18 +24,15 @@ const fixtures = [
   { name: 'buffer-4KiB-convert', value: Buffer.alloc(4096, 97), convert: true },
 ];
 const batch = 32;
-const Constructor = variant === 'generic' ? GenericRawSource : DirectRawSource;
 
 // Sanity checks belong to benchmark setup, not a general test-suite invocation.
 for (const fixture of fixtures) {
   const expected = Buffer.isBuffer(fixture.value) && fixture.convert ? fixture.value.toString('utf8') : fixture.value;
-  for (const Class of [GenericRawSource, DirectRawSource]) {
-    const instance = new Class(fixture.value, fixture.convert);
-    assert.deepStrictEqual(instance.source(), expected);
-    assert.equal(instance.isBuffer(), Buffer.isBuffer(fixture.value) && !fixture.convert);
-    assert.equal(instance.size(), Buffer.byteLength(fixture.value));
-    assert.deepEqual(Object.getOwnPropertyNames(instance), []);
-  }
+  const instance = new api.RawSource(fixture.value, fixture.convert);
+  assert.deepStrictEqual(instance.source(), expected);
+  assert.equal(instance.isBuffer(), Buffer.isBuffer(fixture.value) && !fixture.convert);
+  assert.equal(instance.size(), Buffer.byteLength(fixture.value));
+  assert.deepEqual(Object.getOwnPropertyNames(instance), []);
 }
 global.gc();
 
@@ -75,9 +47,7 @@ for (const scope of ['native-entry', 'constructor']) {
     let receivers;
     bench.add(name, () => {
       if (scope === 'constructor') {
-        for (let i = 0; i < batch; i++) receivers[i] = new Constructor(fixture.value, fixture.convert);
-      } else if (variant === 'generic') {
-        for (let i = 0; i < batch; i++) binding.rawBenchmarkGenericNew(receivers[i], 'raw', [fixture.value, fixture.convert]);
+        for (let i = 0; i < batch; i++) receivers[i] = new api.RawSource(fixture.value, fixture.convert);
       } else {
         for (let i = 0; i < batch; i++) binding.rawNew(receivers[i], fixture.value, fixture.convert);
       }
@@ -91,8 +61,7 @@ for (const scope of ['native-entry', 'constructor']) {
         }
       },
       afterEach() {
-        // Include real native allocation/wrapping, exclude collection in both
-        // variants; retaining every receiver prevents mid-batch reclamation.
+        // Retain every receiver to keep collection outside the timed batch.
         receivers = undefined;
         global.gc();
       },
@@ -101,8 +70,8 @@ for (const scope of ['native-entry', 'constructor']) {
 }
 if (!bench.tasks.length) throw new Error(`No benchmark matches ${filter}`);
 console.log(JSON.stringify({
-  variant, codspeedMode: mode, batch, platform: `${process.platform}-${process.arch}`, node: process.version,
-  semantics: 'native-entry excludes receiver preparation; constructor includes it; both construct the same Rust RawSource binding; GC outside timed batches; divide each measurement by batch for per-source cost',
+  codspeedMode: mode, batch, platform: `${process.platform}-${process.arch}`, node: process.version,
+  semantics: 'native-entry measures rawNew with receivers prepared outside timing; constructor measures new RawSource; GC outside timed batches; divide each measurement by batch for per-source cost',
   fixtures: fixtures.map(({ name, value, convert }) => ({ name, bytes: Buffer.byteLength(value), convert })),
 }));
 bench.runSync();

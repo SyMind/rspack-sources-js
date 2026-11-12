@@ -444,7 +444,7 @@ export default function StaticPage(_ref) {
 		assert.strictEqual(source.sourceAndMap().source, "Hello You");
 	});
 
-	it("should expose buffers() reflecting the replaced source", () => {
+	it.skip("should expose buffers() reflecting the replaced source", () => {
 		const source = new ReplaceSource(new RawSource("Hello World"));
 		source.replace(6, 10, "You");
 		const buffers = source.buffers();
@@ -454,7 +454,7 @@ export default function StaticPage(_ref) {
 		assert.deepStrictEqual(Buffer.concat(buffers), source.buffer());
 	});
 
-	it("should delegate buffers() to the underlying source when no replacements", () => {
+	it.skip("should delegate buffers() to the underlying source when no replacements", () => {
 		const inner = new RawSource(Buffer.from("untouched"));
 		const source = new ReplaceSource(inner);
 		const buffers = source.buffers();

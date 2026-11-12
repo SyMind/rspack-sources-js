@@ -7,7 +7,7 @@ pub(crate) fn parse_map(value: Unknown<'_>) -> Result<Option<SourceMap>> {
         ValueType::Undefined | ValueType::Null => return Ok(None),
         ValueType::String => SourceMap::from_json(crate::sources::text(value)?),
         _ if value.is_buffer()? => {
-            SourceMap::from_bytes(unsafe { value.cast::<BufferSlice>()? }.to_vec())
+            SourceMap::from_bytes(unsafe { value.cast::<Buffer>()? }.to_vec())
         }
         ValueType::Object => {
             let env = napi::Env::from(value.value().env);

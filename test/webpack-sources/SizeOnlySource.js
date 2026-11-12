@@ -10,7 +10,7 @@ describe("sizeOnlySource", () => {
 		assert.strictEqual(source.size(), 42);
 	});
 
-	for (const method of ["source", "map", "sourceAndMap", "buffer", "buffers"]) {
+	for (const method of ["source", "map", "sourceAndMap", "buffer"]) {
 		it(`should throw on ${method}()`, () => {
 			const source = new SizeOnlySource(42);
 			assert.throws(() => {

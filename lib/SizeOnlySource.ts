@@ -27,10 +27,6 @@ export class SizeOnlySource extends Source {
     return unavailable();
   }
 
-  buffers(): Buffer<ArrayBufferLike>[] {
-    return unavailable();
-  }
-
   map(_options?: MapOptions | undefined): RawSourceMap | null {
     return unavailable();
   }

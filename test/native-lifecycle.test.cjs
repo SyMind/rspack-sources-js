@@ -432,3 +432,15 @@ test('editing a source preserves outstanding views from before the edit', () => 
   assert.equal(first.toString(), 'irst');
   assert.equal(concat.source(), 'firstsecond');
 });
+
+test('CompatSource captures custom buffer bytes independently of the source text', () => {
+  const bytes = Buffer.from([0xff, 0x80]);
+  const source = new api.CompatSource({
+    source: () => 'text',
+    buffer: () => bytes,
+    get buffers() { assert.fail('unexpected lookup of the removed method'); },
+  });
+  bytes.fill(0);
+  assert.equal(source.source(), 'text');
+  assert.deepEqual(new api.PrefixSource('', source).buffer(), Buffer.from([0xff, 0x80]));
+});

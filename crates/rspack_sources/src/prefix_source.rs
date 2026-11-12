@@ -33,11 +33,17 @@ impl PrefixSource {
 
 impl Source for PrefixSource {
   fn source(&self) -> SourceValue<'_> {
+    if self.prefix.is_empty() {
+      return self.inner.source();
+    }
     let mut text = String::new();
     self.rope(&mut |part| text.push_str(part));
     SourceValue::String(Cow::Owned(text))
   }
   fn rope<'a>(&'a self, visit: &mut dyn FnMut(&'a str)) {
+    if self.prefix.is_empty() {
+      return self.inner.rope(visit);
+    }
     visit(&self.prefix);
     let mut newline = false;
     self.inner.rope(&mut |part| {
@@ -51,9 +57,16 @@ impl Source for PrefixSource {
     });
   }
   fn buffer(&self) -> Cow<'_, [u8]> {
-    self.source().into_bytes()
+    if self.prefix.is_empty() {
+      self.inner.buffer()
+    } else {
+      self.source().into_bytes()
+    }
   }
   fn size(&self) -> usize {
+    if self.prefix.is_empty() {
+      return self.source().into_bytes().len();
+    }
     let mut size = 0;
     self.rope(&mut |part| size += part.len());
     size
@@ -62,6 +75,9 @@ impl Source for PrefixSource {
     get_map(self.stream_chunks().as_ref(), options)
   }
   fn to_writer(&self, writer: &mut dyn Write) -> io::Result<()> {
+    if self.prefix.is_empty() {
+      return self.inner.to_writer(writer);
+    }
     let mut result = Ok(());
     self.rope(&mut |text| {
       if result.is_ok() {

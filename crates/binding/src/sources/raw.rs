@@ -56,20 +56,3 @@ pub fn raw_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Value>
 pub fn raw_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
     super::source_and_map(&buffer_owner_of::<RawSourceBinding>(receiver)?, columns)
 }
-
-#[cfg(feature = "benchmark-legacy-api")]
-#[napi]
-pub fn raw_benchmark_generic_new(
-    receiver: Object<'_>,
-    kind: String,
-    args: Vec<Unknown<'_>>,
-) -> Result<Vec<String>> {
-    let [value, convert] = args.as_slice() else {
-        return Err(crate::invalid("Expected value and convertToString"));
-    };
-    if kind != "raw" {
-        return Err(crate::invalid("Unsupported benchmark kind"));
-    }
-    raw_new(receiver, *value, convert.coerce_to_bool()?)?;
-    Ok(Vec::new())
-}

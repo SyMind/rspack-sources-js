@@ -4,12 +4,10 @@
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { internString } from './helpers/stringBufferUtils';
 
 export class RawSource extends Source {
   constructor(value: string | Buffer, convertToString = false) {
     super();
-    if (typeof value === 'string') value = internString(value);
     binding.rawNew(this, value, convertToString);
   }
 

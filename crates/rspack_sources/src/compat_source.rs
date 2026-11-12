@@ -12,11 +12,27 @@ use crate::{
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct CompatSource {
   inner: SourceRef,
+  pub(crate) byte_source: Option<SourceRef>,
 }
 
 impl CompatSource {
   pub fn new(inner: SourceRef) -> Self {
-    Self { inner }
+    Self {
+      inner,
+      byte_source: None,
+    }
+  }
+
+  /// Capture the byte representation supplied by an external source-like.
+  pub fn with_byte_source(inner: SourceRef, byte_source: SourceRef) -> Self {
+    Self {
+      inner,
+      byte_source: Some(byte_source),
+    }
+  }
+
+  fn bytes(&self) -> &SourceRef {
+    self.byte_source.as_ref().unwrap_or(&self.inner)
   }
 
   pub fn inner(&self) -> &SourceRef {
@@ -32,7 +48,7 @@ impl Source for CompatSource {
     self.inner().rope(f);
   }
   fn buffer(&self) -> Cow<'_, [u8]> {
-    self.inner().buffer()
+    self.bytes().buffer()
   }
   fn size(&self) -> usize {
     self.inner().size()
@@ -41,7 +57,7 @@ impl Source for CompatSource {
     self.inner().map(options)
   }
   fn to_writer(&self, writer: &mut dyn Write) -> io::Result<()> {
-    self.inner().to_writer(writer)
+    self.bytes().to_writer(writer)
   }
 }
 

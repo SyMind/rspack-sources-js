@@ -15,13 +15,14 @@ new sources.CachedSource(() => original);
 new sources.CachedSource(async () => original);
 const result: sources.SourceAndMap = cached.sourceAndMap({ columns: true });
 const map: sources.RawSourceMap | null = result.map;
-const chunks: Buffer[] = cached.buffers();
+// @ts-expect-error Source exposes only the single-buffer accessor.
+cached.buffers();
 // @ts-expect-error The public Source API does not expose streaming callbacks.
 concat.streamChunks;
 const replacement: sources.Replacement = new sources.ReplaceSource.Replacement(0, 0, 'x');
 // @ts-expect-error replacement content must be a string
 replaced.replace(0, 0, 42);
-void [cachedOriginal, map, chunks, replacement];
+void [cachedOriginal, map, replacement];
 
 const writableCopy: ReturnType<typeof cached.buffer> = Buffer.from(cached.buffer());
 writableCopy[0] = 1;
