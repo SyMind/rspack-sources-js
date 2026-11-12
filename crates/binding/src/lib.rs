@@ -1,5 +1,6 @@
 pub mod diagnostics;
 mod maps;
+mod output_buffer;
 mod positions;
 mod source_binding;
 pub mod sources;

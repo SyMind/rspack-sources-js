@@ -39,7 +39,9 @@ ESM named exports and TypeScript declarations are included.
 
 Each concrete JS constructor attaches its own Rust binding to the receiver with one `napi_wrap`. The binding holds a `SourceRef`. Composite sources share those references, and JS parents keep their original child wrappers alive. Accessors such as `original()` return that JS object.
 
-Content, buffers, byte sizes and maps come from the bound Rust source. For example, `CachedSource.size()` calls Rust's `CachedSource::size()`, and the Rust source owns the cache. `sourceAndMap()` calls the source and map methods in one native entry. Buffers and map objects returned to JS are independent values. The supported map option is `columns`. JS `streamChunks()` is unsupported.
+Content, buffers, byte sizes and maps come from the bound Rust source. For example, `CachedSource.size()` calls Rust's `CachedSource::size()`, and the Rust source owns the cache. `sourceAndMap()` calls the source and map methods in one native entry. Map objects returned to JS are independent values. The supported map option is `columns`. JS `streamChunks()` is unsupported.
+
+**Treat every Buffer returned by a Source or passed to a hash callback as read-only.** These are ordinary Node.js Buffers. JavaScript does not enforce write protection, and the bytes may point directly into a Rust string or byte allocation. Writing to them can cause data races, corrupt source data, or crash the process. This also applies to `buf.slice()`, `buf.subarray()`, and views over `buf.buffer`, which share the same memory. Use `Buffer.from(buf)` to make a writable copy before modifying the bytes or passing them to an API that writes into its input. The backing store keeps the native source alive until its last borrowed view is collected.
 
 `ConcatSource` takes strings and bound Sources. Rust flattens nested concats on ordinary append and retains them on `addAllSkipOptimizing()`. `getChildren()` returns a fresh array. Child objects retain their JS identity, and merged string literals are returned as new `RawSource` objects. Wrap an external Source-like in `CompatSource` to capture its content and optional map at construction.
 

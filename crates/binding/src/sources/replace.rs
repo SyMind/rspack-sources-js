@@ -1,17 +1,23 @@
 use crate::source_binding::{NativeBinding, attach, edit, require, source_of};
 use crate::{diagnostics::STATS, invalid, positions::ByteOffsets};
+use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{ReplaceSource, SourceExt, SourceRef};
 use std::cell::{OnceCell, RefCell};
+use std::sync::Arc;
 
 pub(crate) struct ReplaceSourceBinding {
-    inner: RefCell<SourceRef>,
+    inner: RefCell<Arc<SourceRef>>,
     offsets: OnceCell<Option<ByteOffsets>>,
 }
 
 impl NativeBinding for ReplaceSourceBinding {
     fn source(&self) -> SourceRef {
+        self.inner.borrow().as_ref().clone()
+    }
+
+    fn buffer_owner(&self) -> Arc<SourceRef> {
         self.inner.borrow().clone()
     }
 }
@@ -20,7 +26,7 @@ impl NativeBinding for ReplaceSourceBinding {
 pub fn replace_new(receiver: Object<'_>, original: Unknown<'_>) -> Result<()> {
     let source = ReplaceSource::new(super::bound_input(original)?).boxed();
     attach(receiver, source, |source| ReplaceSourceBinding {
-        inner: RefCell::new(source),
+        inner: RefCell::new(Arc::new(source)),
         offsets: OnceCell::new(),
     })
 }
@@ -96,6 +102,7 @@ pub fn replace_get_replacements<'env>(
         let bound = binding.inner.borrow();
         let replace = bound
             .as_ref()
+            .as_ref()
             .as_any()
             .downcast_ref::<ReplaceSource>()
             .expect("ReplaceSource binding");
@@ -122,18 +129,17 @@ pub fn replace_get_replacements<'env>(
 }
 
 #[napi(catch_unwind)]
-pub fn replace_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
-    Ok(super::js_source(
-        source_of::<ReplaceSourceBinding>(receiver)?.source(),
-    ))
+pub fn replace_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
+    Ok(OutputBuffer::source(&buffer_owner_of::<
+        ReplaceSourceBinding,
+    >(receiver)?))
 }
 
 #[napi(catch_unwind)]
-pub fn replace_buffer(receiver: Object<'_>) -> Result<Buffer> {
-    Ok(source_of::<ReplaceSourceBinding>(receiver)?
-        .buffer()
-        .into_owned()
-        .into())
+pub fn replace_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
+    Ok(OutputBuffer::buffer(&buffer_owner_of::<
+        ReplaceSourceBinding,
+    >(receiver)?))
 }
 
 #[napi(catch_unwind)]
@@ -151,8 +157,5 @@ pub fn replace_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Va
 
 #[napi(catch_unwind)]
 pub fn replace_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
-    super::source_and_map(
-        source_of::<ReplaceSourceBinding>(receiver)?.as_ref(),
-        columns,
-    )
+    super::source_and_map(&buffer_owner_of::<ReplaceSourceBinding>(receiver)?, columns)
 }

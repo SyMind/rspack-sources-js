@@ -1,15 +1,21 @@
 use crate::source_binding::{NativeBinding, attach, edit, require, source_of};
+use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{OriginalSource, SourceExt, SourceRef};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 pub(crate) struct OriginalSourceBinding {
-    inner: RefCell<SourceRef>,
+    inner: RefCell<Arc<SourceRef>>,
 }
 
 impl NativeBinding for OriginalSourceBinding {
     fn source(&self) -> SourceRef {
+        self.inner.borrow().as_ref().clone()
+    }
+
+    fn buffer_owner(&self) -> Arc<SourceRef> {
         self.inner.borrow().clone()
     }
 }
@@ -18,7 +24,7 @@ impl NativeBinding for OriginalSourceBinding {
 pub fn original_new(receiver: Object<'_>, value: Unknown<'_>, name: String) -> Result<()> {
     let source = OriginalSource::new(super::text(value)?, name).boxed();
     attach(receiver, source, |source| OriginalSourceBinding {
-        inner: RefCell::new(source),
+        inner: RefCell::new(Arc::new(source)),
     })
 }
 
@@ -49,18 +55,17 @@ pub fn original_get_name(receiver: Object<'_>) -> Result<String> {
 }
 
 #[napi]
-pub fn original_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
-    Ok(super::js_source(
-        source_of::<OriginalSourceBinding>(receiver)?.source(),
-    ))
+pub fn original_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
+    Ok(OutputBuffer::source(&buffer_owner_of::<
+        OriginalSourceBinding,
+    >(receiver)?))
 }
 
 #[napi]
-pub fn original_buffer(receiver: Object<'_>) -> Result<Buffer> {
-    Ok(source_of::<OriginalSourceBinding>(receiver)?
-        .buffer()
-        .into_owned()
-        .into())
+pub fn original_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
+    Ok(OutputBuffer::buffer(&buffer_owner_of::<
+        OriginalSourceBinding,
+    >(receiver)?))
 }
 
 #[napi]
@@ -79,7 +84,7 @@ pub fn original_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::V
 #[napi]
 pub fn original_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
     super::source_and_map(
-        source_of::<OriginalSourceBinding>(receiver)?.as_ref(),
+        &buffer_owner_of::<OriginalSourceBinding>(receiver)?,
         columns,
     )
 }

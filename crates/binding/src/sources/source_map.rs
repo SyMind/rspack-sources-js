@@ -1,5 +1,6 @@
 use crate::source_binding::{NativeBinding, attach, source_of};
 use crate::{invalid, maps::parse_map};
+use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{SourceExt, SourceMapSource, SourceMapSourceOptions, SourceRef};
@@ -58,9 +59,9 @@ pub fn source_map_new(
     })
 }
 
-type OptionalBuffer = Either<Buffer, Undefined>;
+type OptionalBuffer = Either<OutputBuffer, Undefined>;
 type SourceMapArgs = (
-    Buffer,
+    OutputBuffer,
     String,
     OptionalBuffer,
     OptionalBuffer,
@@ -70,7 +71,8 @@ type SourceMapArgs = (
 
 #[napi]
 pub fn source_map_get_args_as_buffers(receiver: Object<'_>) -> Result<SourceMapArgs> {
-    let bound = source_of::<SourceMapSourceBinding>(receiver)?;
+    let owner = buffer_owner_of::<SourceMapSourceBinding>(receiver)?;
+    let bound = owner.as_ref();
     let s = bound
         .as_ref()
         .as_any()
@@ -78,15 +80,15 @@ pub fn source_map_get_args_as_buffers(receiver: Object<'_>) -> Result<SourceMapA
         .expect("SourceMapSource binding");
     let map_buffer = |map: Option<&rspack_sources::SourceMap>| {
         map.map_or(Either::B(()), |map| {
-            Either::A(Buffer::from(map.to_json().into_bytes()))
+            Either::A(OutputBuffer::owned(map.to_json().into_bytes()))
         })
     };
     Ok((
-        Buffer::from(s.value().as_bytes()),
+        unsafe { OutputBuffer::borrowed(&owner, s.value().as_bytes()) },
         s.name().to_owned(),
         map_buffer(s.input_map()),
         s.original_source().map_or(Either::B(()), |text| {
-            Either::A(Buffer::from(text.as_bytes()))
+            Either::A(unsafe { OutputBuffer::borrowed(&owner, text.as_bytes()) })
         }),
         map_buffer(s.inner_source_map()),
         s.remove_original_source(),
@@ -94,18 +96,17 @@ pub fn source_map_get_args_as_buffers(receiver: Object<'_>) -> Result<SourceMapA
 }
 
 #[napi]
-pub fn source_map_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
-    Ok(super::js_source(
-        source_of::<SourceMapSourceBinding>(receiver)?.source(),
-    ))
+pub fn source_map_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
+    Ok(OutputBuffer::source(&buffer_owner_of::<
+        SourceMapSourceBinding,
+    >(receiver)?))
 }
 
 #[napi]
-pub fn source_map_buffer(receiver: Object<'_>) -> Result<Buffer> {
-    Ok(source_of::<SourceMapSourceBinding>(receiver)?
-        .buffer()
-        .into_owned()
-        .into())
+pub fn source_map_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
+    Ok(OutputBuffer::buffer(&buffer_owner_of::<
+        SourceMapSourceBinding,
+    >(receiver)?))
 }
 
 #[napi]
@@ -127,7 +128,7 @@ pub fn source_map_source_and_map(
     columns: bool,
 ) -> Result<super::SourceAndMap> {
     super::source_and_map(
-        source_of::<SourceMapSourceBinding>(receiver)?.as_ref(),
+        &buffer_owner_of::<SourceMapSourceBinding>(receiver)?,
         columns,
     )
 }

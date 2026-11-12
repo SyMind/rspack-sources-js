@@ -1,11 +1,12 @@
-use crate::invalid;
 use crate::source_binding::binding_of;
-use crate::sources::{SourceAndMap, js_source, source_and_map, source_map};
+use crate::sources::{SourceAndMap, source_and_map, source_map};
+use crate::{invalid, output_buffer::OutputBuffer};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::SourceRef;
 use serde_json::Value;
 use std::cell::RefCell;
+use std::sync::Arc;
 
 #[napi(object)]
 #[derive(Default, Clone)]
@@ -30,20 +31,19 @@ pub fn debug_source_stats(reset: Option<bool>) -> SourceStats {
 
 #[napi]
 pub struct NativeSource {
-    pub(crate) source: SourceRef,
+    pub(crate) source: Arc<SourceRef>,
 }
 
 #[napi]
 impl NativeSource {
     #[napi(catch_unwind)]
-    pub fn source(&self) -> Either<String, Buffer> {
-        js_source(self.source.source())
+    pub fn source(&self) -> Either<String, OutputBuffer> {
+        OutputBuffer::source(&self.source)
     }
 
     #[napi(catch_unwind)]
-    pub fn buffer(&self) -> Buffer {
-        // JS receives its own writable allocation, never shared Rust backing storage.
-        self.source.buffer().into_owned().into()
+    pub fn buffer(&self) -> OutputBuffer {
+        OutputBuffer::buffer(&self.source)
     }
 
     #[napi(catch_unwind)]
@@ -53,12 +53,12 @@ impl NativeSource {
 
     #[napi(catch_unwind)]
     pub fn map(&self, columns: bool) -> Result<Value> {
-        source_map(self.source.as_ref(), columns)
+        source_map(self.source.as_ref().as_ref(), columns)
     }
 
     #[napi(catch_unwind)]
     pub fn source_and_map(&self, columns: bool) -> Result<SourceAndMap> {
-        source_and_map(self.source.as_ref(), columns)
+        source_and_map(&self.source, columns)
     }
 }
 
@@ -74,7 +74,7 @@ pub fn debug_bound_source_type(receiver: Object<'_>) -> Result<&'static str> {
 pub fn debug_source_snapshot(receiver: Object<'_>) -> Result<Option<NativeSource>> {
     Ok(
         binding_of(receiver.to_unknown())?.map(|binding| NativeSource {
-            source: binding.source(),
+            source: Arc::new(binding.source()),
         }),
     )
 }

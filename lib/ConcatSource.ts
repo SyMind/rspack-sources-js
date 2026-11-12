@@ -34,7 +34,7 @@ export class ConcatSource extends Source {
     }
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.concatBuffer(this);
   }
 

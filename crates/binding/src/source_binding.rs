@@ -7,6 +7,10 @@ use crate::{diagnostics::STATS, invalid};
 
 pub(crate) trait NativeBinding: Any {
     fn source(&self) -> SourceRef;
+
+    fn buffer_owner(&self) -> Arc<SourceRef> {
+        Arc::new(self.source())
+    }
 }
 
 // napi_unwrap may return a foreign addon's pointer. Check our tag before
@@ -47,6 +51,12 @@ pub(crate) fn source_of<T: NativeBinding>(receiver: Object<'_>) -> Result<Source
     Ok(source)
 }
 
+pub(crate) fn buffer_owner_of<T: NativeBinding>(receiver: Object<'_>) -> Result<Arc<SourceRef>> {
+    let owner = require::<T>(receiver)?.buffer_owner();
+    STATS.with(|s| s.borrow_mut().native_reads += 1);
+    Ok(owner)
+}
+
 pub(crate) fn attach<T: NativeBinding>(
     mut receiver: Object<'_>,
     source: SourceRef,
@@ -63,13 +73,23 @@ pub(crate) fn attach<T: NativeBinding>(
 }
 
 // Do not call JS inside the edit closure.
-pub(crate) fn edit<T: Source + 'static, R>(
-    inner: &RefCell<SourceRef>,
+pub(crate) fn edit<T: Source + Clone + 'static, R>(
+    inner: &RefCell<Arc<SourceRef>>,
     class: &str,
     apply: impl FnOnce(&mut T) -> R,
 ) -> Result<R> {
     let mut bound = inner.borrow_mut();
-    let source = bound
+    // Parents and diagnostic snapshots own independent SourceRefs and keep
+    // their existing exclusive-edit rule. Only exported Buffers share this
+    // outer Arc; detach those views on the first subsequent edit.
+    if Arc::get_mut(&mut bound).is_none() {
+        let snapshot = bound
+            .clone_for_edit::<T>()
+            .ok_or_else(|| napi::Error::from_reason(format!("Cannot modify shared {class}")))?;
+        *bound = Arc::new(snapshot);
+    }
+    let source = Arc::get_mut(&mut bound)
+        .unwrap()
         .get_mut()
         .ok_or_else(|| napi::Error::from_reason(format!("Cannot modify shared {class}")))?;
     let source = source

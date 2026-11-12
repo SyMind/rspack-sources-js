@@ -427,6 +427,9 @@ impl Source for ReplaceSource {
   }
 
   fn buffer(&self) -> Cow<'_, [u8]> {
+    if self.replacements.is_empty() {
+      return self.inner.buffer();
+    }
     self.source().into_bytes()
   }
 
@@ -478,6 +481,9 @@ impl Source for ReplaceSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    if self.replacements.is_empty() {
+      return self.inner.to_writer(writer);
+    }
     let mut result = Ok(());
     self.rope(&mut |chunk| {
       if result.is_err() {

@@ -29,7 +29,7 @@ export class CachedSource extends Source {
     return binding.cachedSource(this);
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.cachedBuffer(this);
   }
 

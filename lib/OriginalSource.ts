@@ -20,7 +20,7 @@ export class OriginalSource extends Source {
     return binding.originalSource(this);
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.originalBuffer(this);
   }
 

@@ -55,7 +55,7 @@ export class ReplaceSource extends Source {
     return binding.replaceSource(this);
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.replaceBuffer(this);
   }
 

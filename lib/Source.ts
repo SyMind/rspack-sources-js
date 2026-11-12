@@ -7,7 +7,8 @@ export class Source {
     throw new Error("Abstract");
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  /** Treat the returned bytes as read-only. Use Buffer.from(source.buffer()) for a writable copy. */
+  buffer(): Buffer {
     const source = this.source();
     if (Buffer.isBuffer(source))
       return source;
@@ -105,7 +106,7 @@ export type SourceAndMap = {
 };
 export type HashLike = {
   /**
-   * make hash update
+   * Consume read-only bytes. Copy with Buffer.from(data) before writing.
    */
   update: (data: string | Buffer, inputEncoding?: string) => HashLike;
   /**

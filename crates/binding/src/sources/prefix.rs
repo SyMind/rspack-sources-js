@@ -1,4 +1,5 @@
 use crate::source_binding::{NativeBinding, attach, source_of};
+use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{PrefixSource, SourceExt, SourceRef};
@@ -31,18 +32,17 @@ pub fn prefix_get_prefix(receiver: Object<'_>) -> Result<String> {
 }
 
 #[napi(catch_unwind)]
-pub fn prefix_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
-    Ok(super::js_source(
-        source_of::<PrefixSourceBinding>(receiver)?.source(),
+pub fn prefix_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
+    Ok(OutputBuffer::source(
+        &buffer_owner_of::<PrefixSourceBinding>(receiver)?,
     ))
 }
 
 #[napi(catch_unwind)]
-pub fn prefix_buffer(receiver: Object<'_>) -> Result<Buffer> {
-    Ok(source_of::<PrefixSourceBinding>(receiver)?
-        .buffer()
-        .into_owned()
-        .into())
+pub fn prefix_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
+    Ok(OutputBuffer::buffer(
+        &buffer_owner_of::<PrefixSourceBinding>(receiver)?,
+    ))
 }
 
 #[napi(catch_unwind)]
@@ -60,8 +60,5 @@ pub fn prefix_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Val
 
 #[napi(catch_unwind)]
 pub fn prefix_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
-    super::source_and_map(
-        source_of::<PrefixSourceBinding>(receiver)?.as_ref(),
-        columns,
-    )
+    super::source_and_map(&buffer_owner_of::<PrefixSourceBinding>(receiver)?, columns)
 }

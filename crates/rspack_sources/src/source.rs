@@ -44,6 +44,18 @@ impl SourceRef {
     Arc::get_mut(&mut self.inner)
   }
 
+  /// Fork an editable JS source when only exported byte views retain its handle.
+  #[cfg(feature = "binding")]
+  pub fn clone_for_edit<T: Source + Clone + 'static>(&self) -> Option<Self> {
+    if Arc::strong_count(&self.inner) != 1 {
+      return None;
+    }
+    Some(Self {
+      inner: Arc::new(self.as_ref().as_any().downcast_ref::<T>()?.clone()),
+      jsobject: self.jsobject.clone(),
+    })
+  }
+
   pub fn ptr_eq(&self, other: &Self) -> bool {
     Arc::ptr_eq(&self.inner, &other.inner)
   }

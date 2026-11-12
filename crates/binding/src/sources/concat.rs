@@ -3,17 +3,23 @@ use crate::{
     invalid,
     source_binding::{NativeBinding, attach, binding_of, edit, require, source_of},
 };
+use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
 use napi::{Env, Result, ValueType, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{ConcatSource, RawStringSource, SourceExt, SourceRef};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 pub(crate) struct ConcatSourceBinding {
-    inner: RefCell<SourceRef>,
+    inner: RefCell<Arc<SourceRef>>,
 }
 
 impl NativeBinding for ConcatSourceBinding {
     fn source(&self) -> SourceRef {
+        self.inner.borrow().as_ref().clone()
+    }
+
+    fn buffer_owner(&self) -> Arc<SourceRef> {
         self.inner.borrow().clone()
     }
 }
@@ -31,7 +37,7 @@ pub fn concat_new(receiver: Object<'_>, items: Vec<Unknown<'_>>) -> Result<()> {
     let children = items.into_iter().map(child).collect::<Result<Vec<_>>>()?;
     attach(receiver, ConcatSource::new(children).boxed(), |source| {
         ConcatSourceBinding {
-            inner: RefCell::new(source),
+            inner: RefCell::new(Arc::new(source)),
         }
     })
 }
@@ -90,18 +96,17 @@ pub fn concat_add_all_skip_optimizing(receiver: Object<'_>, items: Vec<Unknown<'
 }
 
 #[napi(catch_unwind)]
-pub fn concat_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
-    Ok(super::js_source(
-        source_of::<ConcatSourceBinding>(receiver)?.source(),
+pub fn concat_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
+    Ok(OutputBuffer::source(
+        &buffer_owner_of::<ConcatSourceBinding>(receiver)?,
     ))
 }
 
 #[napi(catch_unwind)]
-pub fn concat_buffer(receiver: Object<'_>) -> Result<Buffer> {
-    Ok(source_of::<ConcatSourceBinding>(receiver)?
-        .buffer()
-        .into_owned()
-        .into())
+pub fn concat_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
+    Ok(OutputBuffer::buffer(
+        &buffer_owner_of::<ConcatSourceBinding>(receiver)?,
+    ))
 }
 
 #[napi(catch_unwind)]
@@ -119,10 +124,7 @@ pub fn concat_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Val
 
 #[napi(catch_unwind)]
 pub fn concat_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
-    super::source_and_map(
-        source_of::<ConcatSourceBinding>(receiver)?.as_ref(),
-        columns,
-    )
+    super::source_and_map(&buffer_owner_of::<ConcatSourceBinding>(receiver)?, columns)
 }
 
 #[napi(catch_unwind)]

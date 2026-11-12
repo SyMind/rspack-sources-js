@@ -8,14 +8,15 @@ pub mod replace;
 pub mod size_only;
 pub mod source_map;
 
-use crate::{invalid, maps::parse_map, source_binding::binding_of};
+use crate::{invalid, maps::parse_map, output_buffer::OutputBuffer, source_binding::binding_of};
 use napi::{Result, ValueType, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{
-    MapOptions, RawBufferSource, RawStringSource, Source, SourceExt, SourceMapSource, SourceRef,
-    SourceValue, WithoutOriginalOptions,
+    MapOptions, RawBufferSource, RawStringSource, Source, SourceExt, SourceMapSource,
+    SourceRef, WithoutOriginalOptions,
 };
 use serde_json::Value;
+use std::sync::Arc;
 
 pub(crate) fn text(value: Unknown<'_>) -> Result<String> {
     if value.is_buffer()? {
@@ -71,16 +72,9 @@ pub(crate) fn bound_input(value: Unknown<'_>) -> Result<SourceRef> {
     }
 }
 
-pub(crate) fn js_source(value: SourceValue<'_>) -> Either<String, Buffer> {
-    match value {
-        SourceValue::String(s) => Either::A(s.into_owned()),
-        SourceValue::Buffer(b) => Either::B(b.into_owned().into()),
-    }
-}
-
 #[napi(object, object_from_js = false)]
 pub struct SourceAndMap {
-    pub source: Either<String, Buffer>,
+    pub source: Either<String, OutputBuffer>,
     pub map: Value,
 }
 
@@ -88,9 +82,9 @@ pub(crate) fn source_map(source: &dyn Source, columns: bool) -> Result<Value> {
     Ok(serde_json::to_value(source.map(&MapOptions::new(columns)))?)
 }
 
-pub(crate) fn source_and_map(source: &dyn Source, columns: bool) -> Result<SourceAndMap> {
+pub(crate) fn source_and_map(source: &Arc<SourceRef>, columns: bool) -> Result<SourceAndMap> {
     Ok(SourceAndMap {
-        source: js_source(source.source()),
-        map: source_map(source, columns)?,
+        source: OutputBuffer::source(source),
+        map: source_map(source.as_ref().as_ref(), columns)?,
     })
 }

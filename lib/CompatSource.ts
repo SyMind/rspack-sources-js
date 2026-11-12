@@ -24,7 +24,7 @@ export class CompatSource extends Source {
     return binding.compatSource(this);
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.compatBuffer(this);
   }
 

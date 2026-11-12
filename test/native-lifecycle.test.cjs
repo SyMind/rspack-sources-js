@@ -374,3 +374,61 @@ test('ConcatSource rejects unbound children before appending any of them', () =>
   source.add(new api.CompatSource(custom));
   assert.equal(source.source(), 'ab');
 });
+
+test('external backing stores keep the native graph alive until the last view is collected', () => {
+  const script = `
+    const assert = require('node:assert/strict');
+    const { setImmediate: tick } = require('node:timers/promises');
+    const { CachedSource, RawSource, ReplaceSource } = require(${JSON.stringify(require.resolve('../dist'))});
+    async function collectUntil(predicate) {
+      for (let i = 0; i < 50; i++) {
+        await tick();
+        global.gc();
+        await tick();
+        if (predicate()) return;
+      }
+      assert.fail('objects were not released');
+    }
+    (async () => {
+      const child = new ReplaceSource(new RawSource('a雪z'));
+      function exportView() {
+        const parent = new CachedSource(child);
+        const bytes = parent.buffer();
+        const part = bytes.subarray(1, 4);
+        return {
+          parent: new WeakRef(parent), bytes: new WeakRef(bytes),
+          view: new DataView(part.buffer, part.byteOffset, part.byteLength)
+        };
+      }
+      const held = exportView();
+      await collectUntil(() => !held.parent.deref() && !held.bytes.deref());
+      assert.equal(held.view.getUint8(0), 0xe9);
+      if (!Number(process.config.variables.v8_enable_sandbox || 0)) {
+        assert.throws(() => child.insert(0, '!'), /Cannot modify shared/);
+      }
+      held.view = null;
+      await collectUntil(() => {
+        try { child.insert(0, '!'); return true; }
+        catch (error) { if (/Cannot modify shared/.test(error.message)) return false; throw error; }
+      });
+      assert.equal(child.source(), '!a雪z');
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+  `;
+  const result = spawnSync(process.execPath, ['--expose-gc', '-e', script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('editing a source preserves outstanding views from before the edit', () => {
+  const edited = new api.ReplaceSource(new api.RawSource('abc'));
+  edited.replace(1, 1, '雪');
+  const original = edited.buffer();
+  edited.insert(0, '!');
+  assert.equal(original.toString(), 'a雪c');
+  assert.equal(edited.buffer().toString(), '!a雪c');
+
+  const concat = new api.ConcatSource('first');
+  const first = concat.buffer().subarray(1);
+  concat.add('second');
+  assert.equal(first.toString(), 'irst');
+  assert.equal(concat.source(), 'firstsecond');
+});

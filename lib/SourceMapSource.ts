@@ -12,17 +12,17 @@ export class SourceMapSource extends Source {
   }
 
   getArgsAsBuffers(): [
-    Buffer<ArrayBufferLike>,
+    Buffer,
     string,
-    Buffer<ArrayBufferLike> | undefined,
-    Buffer<ArrayBufferLike> | undefined,
-    Buffer<ArrayBufferLike> | undefined,
+    Buffer | undefined,
+    Buffer | undefined,
+    Buffer | undefined,
     boolean | undefined
   ] {
     return binding.sourceMapGetArgsAsBuffers(this);
   }
 
-  buffer(): Buffer<ArrayBufferLike> {
+  buffer(): Buffer {
     return binding.sourceMapBuffer(this);
   }
 

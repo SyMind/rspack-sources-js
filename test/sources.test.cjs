@@ -54,7 +54,7 @@ test('sharing a child rejects edits before and after native reads', () => {
   assert.throws(() => child.replace(1, 1, 'y'), /Cannot modify shared ReplaceSource/);
   assert.equal(child.getReplacements().length, 1);
   assert.throws(() => parent.add('!'), /Cannot modify shared ConcatSource/);
-  const bytes = held.buffer();
+  const bytes = Buffer.from(held.buffer());
   bytes[0] = 0;
   assert.equal(held.source(), '[Xbc]');
   assert.equal(parent.source(), '[Xbc]');
@@ -160,23 +160,25 @@ test('overlapping edits and insert after replacement use JS semantics', () => co
   r.replace(0, 3, 'x');r.replace(2, 4, 'y');return r;
 }, { native: false }));
 
-test('OriginalSource hash exposes a writable Buffer independent of its UTF-8 snapshot', () => {
+test('copying the Buffer passed to a hash preserves the OriginalSource bytes', () => {
   const text = 'a中😀';
   const source = new api.OriginalSource(text, 'input.js');
   const snapshot = planner.prepare(source);
   const chunks = [];
   source.updateHash({ update(value) { chunks.push(value); return this; } });
   assert.deepStrictEqual(chunks, ['OriginalSource', Buffer.from(text), 'input.js']);
-  assert.strictEqual(source.buffer(), chunks[1]);
+  assert.deepEqual(source.buffer(), chunks[1]);
 
-  chunks[1][0] = 98;
+  const copy = Buffer.from(chunks[1]);
+  copy[0] = 98;
+  assert.equal(copy.toString(), 'b中😀');
   assert.equal(snapshot.source(), text);
   assert.equal(source.source(), text);
   assert.equal(source.sourceAndMap().source, text);
-  assert.equal(source.buffer().toString(), 'b中😀');
+  assert.equal(source.buffer().toString(), text);
 });
 
-test('RawSource and SourceMapSource hash Buffers do not alias prepared snapshots', () => {
+test('RawSource and SourceMapSource hash Buffers match their prepared snapshots', () => {
   const text = 'abc😀';
   const map = { version: 3, sources: ['in.js'], sourcesContent: [text], names: [], mappings: 'AAAA' };
   for (const source of [new api.RawSource(text), new api.SourceMapSource(text, 'in.js', map)]) {
@@ -185,8 +187,8 @@ test('RawSource and SourceMapSource hash Buffers do not alias prepared snapshots
     source.updateHash({ update(value) { chunks.push(value); return this; } });
     const bytes = chunks[1];
     assert.deepEqual(bytes, Buffer.from(text));
-    assert.strictEqual(source.buffer(), bytes);
-    bytes[0] = 0;
+    assert.deepEqual(source.buffer(), bytes);
+    assert.deepEqual(snapshot.buffer(), bytes);
     assert.equal(snapshot.source(), text);
     assert.equal(source.source(), text);
   }
@@ -337,11 +339,13 @@ test('source maps and hashes never read fields of a returned replacement', () =>
   assert.equal(digest(source), hash);
 });
 
-test('ConcatSource reads an edited SourceMapSource buffer', () => {
+test('a writable copy of SourceMapSource bytes is independent of its concat parent', () => {
   const mapped = new api.SourceMapSource('abc', 'x', rawMap());
   const concat = new api.ConcatSource(mapped);
-  mapped.buffer()[0] = 88;
-  assert.deepEqual(concat.buffer(), Buffer.from('Xbc'));
+  const copy = Buffer.from(mapped.buffer());
+  copy[0] = 88;
+  assert.equal(copy.toString(), 'Xbc');
+  assert.equal(concat.buffer().toString(), 'abc');
 });
 
 test('proxy map options keep application callbacks on the JS path', () => {
