@@ -8,8 +8,7 @@ use bytes_str::BytesStr;
 use crate::{
   MapOptions, Source, SourceMap, SourceValue,
   helpers::{
-    Chunks, StreamChunks, TextSpan, get_map, stream_chunks_of_combined_source_map,
-    stream_chunks_of_source_map,
+    Chunks, StreamChunks, get_map, stream_chunks_default, stream_chunks_of_combined_source_map,
   },
 };
 
@@ -63,7 +62,7 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 pub struct SourceMapSource {
   value: Box<str>,
   name: BytesStr,
-  source_map: SourceMap,
+  source_map: Option<SourceMap>,
   original_source: Option<BytesStr>,
   inner_source_map: Option<SourceMap>,
   remove_original_source: bool,
@@ -81,12 +80,29 @@ impl SourceMapSource {
     Self {
       value: Box::from(options.value.into()),
       name: BytesStr::from_string(options.name.into()),
-      source_map: options.source_map,
+      source_map: Some(options.source_map),
       original_source: options
         .original_source
         .map(|text| BytesStr::from_string(text.into())),
       inner_source_map: options.inner_source_map,
       remove_original_source: options.remove_original_source,
+    }
+  }
+
+  /// Create a source for generated text with no source map.
+  pub fn without_map(
+    value: String,
+    name: String,
+    original_source: Option<Box<str>>,
+    remove_original_source: bool,
+  ) -> Self {
+    Self {
+      value: value.into(),
+      name: name.into(),
+      source_map: None,
+      original_source: original_source.map(|text| BytesStr::from_string(text.into())),
+      inner_source_map: None,
+      remove_original_source,
     }
   }
 
@@ -100,9 +116,17 @@ impl SourceMapSource {
     &self.name
   }
 
-  /// Get the source map.
+  /// Get the map supplied to [Self::new].
   pub fn source_map(&self) -> &SourceMap {
-    &self.source_map
+    self
+      .source_map
+      .as_ref()
+      .expect("source was created without a map")
+  }
+
+  /// Get the input map, including the case where the source was created without one.
+  pub fn input_map(&self) -> Option<&SourceMap> {
+    self.source_map.as_ref()
   }
 
   /// Get the original source code.
@@ -140,7 +164,7 @@ impl Source for SourceMapSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if self.inner_source_map.is_none() {
-      return Some(self.source_map.as_borrowed());
+      return self.source_map.as_ref().map(SourceMap::as_borrowed);
     }
     let chunks = self.stream_chunks();
     get_map(chunks.as_ref(), options)
@@ -155,7 +179,9 @@ impl Hash for SourceMapSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "SourceMapSource".hash(state);
     self.buffer().hash(state);
-    self.source_map.hash(state);
+    if let Some(map) = &self.source_map {
+      map.hash(state);
+    }
     self.original_source.hash(state);
     self.inner_source_map.hash(state);
     self.remove_original_source.hash(state);
@@ -184,7 +210,10 @@ impl std::fmt::Debug for SourceMapSource {
     )?;
     writeln!(f, "{indent_str}  value: {:?},", self.value)?;
     writeln!(f, "{indent_str}  name: {:?},", self.name)?;
-    writeln!(f, "{indent_str}  source_map: {:?},", self.source_map)?;
+    match &self.source_map {
+      Some(map) => writeln!(f, "{indent_str}  source_map: {map:?},")?,
+      None => writeln!(f, "{indent_str}  source_map: None,")?,
+    }
     match &self.original_source {
       Some(original_source) => {
         writeln!(
@@ -216,7 +245,7 @@ impl std::fmt::Debug for SourceMapSource {
 struct SourceMapSourceChunks<'source, 'value> {
   value: &'value str,
   name: &'source BytesStr,
-  source_map: &'source SourceMap,
+  source_map: Option<&'source SourceMap>,
   original_source: Option<&'source BytesStr>,
   inner_source_map: Option<&'source SourceMap>,
   remove_original_source: bool,
@@ -227,7 +256,7 @@ impl<'source, 'value> SourceMapSourceChunks<'source, 'value> {
     Self {
       value,
       name: &source.name,
-      source_map: &source.source_map,
+      source_map: source.source_map.as_ref(),
       original_source: source.original_source.as_ref(),
       inner_source_map: source.inner_source_map.as_ref(),
       remove_original_source: source.remove_original_source,
@@ -243,11 +272,11 @@ impl<'source, 'value> Chunks<'source> for SourceMapSourceChunks<'source, 'value>
     on_source: crate::helpers::OnSource<'_>,
     on_name: crate::helpers::OnName<'_>,
   ) -> crate::helpers::GeneratedInfo {
-    if let Some(inner_source_map) = self.inner_source_map {
+    if let (Some(source_map), Some(inner_source_map)) = (self.source_map, self.inner_source_map) {
       stream_chunks_of_combined_source_map(
         options,
         self.value,
-        self.source_map,
+        source_map,
         self.name,
         self.original_source,
         inner_source_map,
@@ -257,9 +286,9 @@ impl<'source, 'value> Chunks<'source> for SourceMapSourceChunks<'source, 'value>
         on_name,
       )
     } else {
-      stream_chunks_of_source_map(
+      stream_chunks_default(
         options,
-        TextSpan::new(self.value),
+        self.value,
         self.source_map,
         on_chunk,
         on_source,

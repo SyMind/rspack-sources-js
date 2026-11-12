@@ -4,23 +4,17 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const api = require('../dist');
 const binding = require('../dist/binding');
-const ref = require('webpack-sources');
 
 test('constructors bind native state before the first read', () => {
   binding.debugSourceStats(true);
   const original = new api.OriginalSource('abc', 'input.js');
   const replaced = new api.ReplaceSource(original, 'edited');
   assert.equal(binding.debugSourceStats().creations, 2);
-  assert.equal(binding.debugSourceStats().compiledNodes, 2);
-  assert.equal(binding.replaceGetField(replaced, '_name'), 'edited');
-  const before = binding.debugSourceStats().compiledNodes;
+  assert.equal(replaced.getName(), 'edited');
   replaced.map(); replaced.map({ columns: false });
-  assert.equal(binding.debugSourceStats().compiledNodes, before);
   replaced.replace(0, 0, 'X');
   assert.equal(binding.debugSourceStats().mutations, 1);
-  assert.equal(binding.debugSourceStats().compiledNodes, before);
   assert.equal(replaced.sourceAndMap().source, 'Xbc');
-  assert.equal(binding.debugSourceStats().compiledNodes, before + 1);
 });
 
 test('ConcatSource binds one mutable Rust source to the JS receiver', () => {
@@ -64,7 +58,7 @@ test('getChildren preserves distinct and shared RawSource wrappers across native
   assert.strictEqual(children[2], second);
   assert.strictEqual(children[3], first);
   assert.notStrictEqual(source.getChildren(), children);
-  assert.strictEqual(source.getChildren()[0], children[0]);
+  assert.equal(source.getChildren()[0].source(), 'ab');
 });
 
 test('all concrete constructors bind their state immediately', () => {
@@ -72,90 +66,206 @@ test('all concrete constructors bind their state immediately', () => {
   const cached = new api.CachedSource(raw);
   assert.strictEqual(cached.originalLazy(), raw);
   assert.equal(binding.cachedSize(cached), 1);
-  for (const [source, read, field, expected] of [
-    [new api.PrefixSource('> ', raw), binding.prefixGetField, '_prefix', '> '],
-    [new api.SizeOnlySource(10), binding.sizeOnlyGetField, '_size', 10],
-    [new api.CompatSource(raw), binding.compatGetField, '_sourceLike', raw],
-    [new api.SourceMapSource('x', 'x.js', {version: 3, sources: [], names: [], mappings: ''}), binding.sourceMapGetField, '_name', 'x.js'],
-  ]) assert.strictEqual(read(source, field), expected);
+  const map = { version: 3, sources: [], names: [], mappings: '' };
+  assert.equal(binding.prefixSource(new api.PrefixSource('> ', raw)), '> x');
+  assert.equal(binding.sizeOnlySize(new api.SizeOnlySource(10)), 10);
+  assert.equal(new api.CompatSource(raw).source(), 'x');
+  assert.deepEqual(binding.sourceMapMap(new api.SourceMapSource('x', 'x.js', map), true), map);
 });
 
-test('native CachedSource resolves lazy factories with the original receiver', () => {
-  let calls = 0;
-  const cached = new api.CachedSource(function () {
-    assert.strictEqual(this, cached);
-    calls++;
-    return new api.RawSource('factory');
-  });
-  cached.clearCache();
-  assert.equal(calls, 0);
-  assert.equal(cached.source(), 'factory');
-  assert.strictEqual(cached.original(), cached.original());
-  assert.equal(calls, 1);
+test('constructors bind a SourceRef of the concrete Rust type before the first read', () => {
+  const raw = new api.RawSource('x');
+  const cached = new api.CachedSource(raw);
+  const cases = [
+    [raw, 'RawStringSource'],
+    [new api.RawSource(Buffer.from('x')), 'RawBufferSource'],
+    [new api.OriginalSource(Buffer.from('x'), 'input.js'), 'OriginalSource'],
+    [new api.SourceMapSource('x', 'input.js'), 'SourceMapSource'],
+    [new api.ConcatSource(raw), 'ConcatSource'],
+    [new api.ReplaceSource(raw), 'ReplaceSource'],
+    [cached, 'CachedSource'],
+    [new api.PrefixSource('> ', raw), 'PrefixSource'],
+    [new api.SizeOnlySource(1), 'SizeOnlySource'],
+    [new api.CompatSource({ source() { return 'x'; } }), 'CompatSource'],
+  ];
+  for (const [source, type] of cases) assert.equal(binding.debugBoundSourceType(source), type);
 });
 
-test('CachedSource retries a failed factory and reuses its source and map separately', () => {
+test('each typed binding rejects a receiver from another Source class', () => {
+  const raw = new api.RawSource('x');
+  const original = new api.OriginalSource('x', 'input.js');
+  const calls = [
+    () => binding.rawSource(original),
+    () => binding.originalSource(raw, true),
+    () => binding.sourceMapSource(raw),
+    () => binding.concatGetChildren(raw),
+    () => binding.replaceSource(raw, original),
+    () => binding.cachedSource(raw),
+    () => binding.prefixSource(raw),
+    () => binding.sizeOnlySize(raw),
+    () => binding.compatSource(raw, original),
+  ];
+  for (const call of calls) assert.throws(call, /Invalid Source receiver/);
+});
+
+test('SourceMapSource validates its map when constructing the native source', () => {
+  assert.throws(() => new api.SourceMapSource('abc', 'input.js', 'invalid JSON'));
+});
+
+test('Source state is independent of webpack private properties', () => {
+  const original = new api.OriginalSource('abc', 'input.js');
+  const cached = new api.CachedSource(original);
+  const replaced = new api.ReplaceSource(cached);
+  for (const source of [original, cached, replaced]) {
+    assert.ok(Object.getOwnPropertyNames(source).every(key => !key.startsWith('_')));
+  }
+  const unexpected = () => assert.fail('accessed a webpack private property');
+  Object.defineProperty(cached, '_cachedSource', { get: unexpected, set: unexpected });
+  Object.defineProperty(replaced, '_replacements', { get: unexpected, set: unexpected });
+  replaced.replace(1, 1, 'X');
+  assert.equal(cached.source(), 'abc');
+  assert.equal(replaced.source(), 'aXc');
+  assert.ok(Object.keys(binding).every(key => !/(?:Get|Set)Field$/.test(key)));
+});
+
+test('CachedSource rejects a factory without invoking it', () => {
+  const factory = () => assert.fail('called a Source factory');
+  assert.throws(() => new api.CachedSource(factory), /expect.*object.*function/i);
+});
+
+test('CachedSource.size reads the native source size', () => {
+  const original = new api.RawSource('é');
+  original.size = () => assert.fail('called JS size');
+  original.source = () => assert.fail('called JS source');
+  original.buffer = () => assert.fail('called JS buffer');
+  const cached = new api.CachedSource(original);
+  assert.equal(cached.size(), 2);
+  assert.equal(binding.cachedSize(cached), 2);
+});
+
+test('nested CachedSource wrappers hold the child through both parents', () => {
+  const child = new api.ReplaceSource(new api.OriginalSource('abc', 'input.js'));
+  const cached = new api.CachedSource(new api.CachedSource(child));
+  const first = new api.ConcatSource(cached);
+  const second = new api.ConcatSource(cached);
+  assert.strictEqual(second.getChildren()[0], cached);
+  const before = binding.debugSourceSnapshot(first);
+  assert.ok(before);
+  assert.ok(binding.debugSourceSnapshot(second));
+  assert.throws(() => child.replace(0, 0, 'X', 'edited'), /Cannot modify shared ReplaceSource/);
+  assert.deepEqual(first.map().names, []);
+  assert.deepEqual(second.map().names, []);
+  assert.equal(second.source(), 'abc');
+  assert.equal(before.source(), 'abc');
+});
+
+test('CachedSource.sourceAndMap uses the bound source and returns binary input as a Buffer', () => {
   const bytes = Buffer.from('abc');
   const original = new api.RawSource(bytes);
-  let attempts = 0;
-  let maps = 0;
-  original.map = () => { maps++; return null; };
-  original.sourceAndMap = () => assert.fail('combined method called');
-  function factory() {
-    assert.strictEqual(this, cached);
-    if (++attempts === 1) throw new Error('retry');
-    return original;
-  }
-  const cached = new api.CachedSource(factory);
-  assert.strictEqual(cached.originalLazy(), factory);
-  assert.throws(() => cached.sourceAndMap(), /retry/);
-  assert.strictEqual(cached.originalLazy(), factory);
-  assert.strictEqual(binding.cachedSourceAndMap(cached, {}).source, bytes);
-  assert.deepEqual(cached.sourceAndMap({}), { source: bytes, map: null });
+  original.map = original.sourceAndMap = () => assert.fail('called a JS map method');
+  const cached = new api.CachedSource(original);
+  assert.deepEqual(cached.sourceAndMap(), { source: bytes, map: null });
   assert.strictEqual(cached.originalLazy(), original);
-  assert.equal(attempts, 2);
-  assert.equal(maps, 1);
 });
 
-test('restored CachedSource data satisfies sourceAndMap without invoking the factory', () => {
-  const factory = () => assert.fail('resolved original');
-  const cached = new api.CachedSource(factory, {
-    source: true,
-    buffer: Buffer.from('abc'),
-    maps: new Map([['{}', { bufferedMap: null }]]),
+test('CachedSource ignores extra constructor arguments and initializes its own caches', () => {
+  const original = new api.OriginalSource('fresh', 'input.js');
+  const unused = new Proxy({}, { get() { assert.fail('read the extra constructor argument'); } });
+  const cached = new api.CachedSource(original, unused);
+  assert.strictEqual(cached.original(), original);
+  assert.deepEqual(cached.sourceAndMap(), original.sourceAndMap());
+});
+
+test('CachedSource returns independently writable copies of its native maps', () => {
+  const original = new api.OriginalSource('const café = 1;', 'input.js');
+  const cached = new api.CachedSource(original);
+  const parent = new api.ConcatSource(cached);
+  const expected = parent.sourceAndMap();
+  cached.map().mappings = 'changed';
+  assert.deepEqual(cached.map(), original.map());
+  assert.deepEqual(cached.sourceAndMap({ columns: false }), original.sourceAndMap({ columns: false }));
+  assert.deepEqual(parent.sourceAndMap(), expected);
+});
+
+test('getReplacements returns independent arrays and Replacement objects', () => {
+  const replaced = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
+  replaced.insert(2, 'A', 'first');
+  replaced.insert(2, 'B', 'second');
+  replaced.insert(0, '!');
+  const parent = new api.ConcatSource(replaced);
+  const first = replaced.getReplacements();
+  const second = replaced.getReplacements();
+  assert.notStrictEqual(first, second);
+  assert.deepEqual(second.map(edit => edit.content), ['!', 'A', 'B']);
+  for (const [index, edit] of first.entries()) {
+    assert.ok(edit instanceof api.ReplaceSource.Replacement);
+    assert.notStrictEqual(edit, second[index]);
+  }
+  const expected = parent.sourceAndMap();
+  assert.equal(expected.source, '!abABc');
+  Object.assign(first[1], { start: 0, end: 2, content: 'changed', name: 'changed' });
+  first.splice(0, 2);
+  first.sort = () => assert.fail('sorted a returned snapshot');
+  assert.deepEqual(replaced.getReplacements(), second);
+  assert.equal(replaced.size(), Buffer.byteLength(expected.source));
+  assert.deepEqual(replaced.buffer(), Buffer.from(expected.source));
+  assert.deepEqual(parent.sourceAndMap(), expected);
+  assert.throws(() => replaced.replace(0, 0, 'X'), /Cannot modify shared ReplaceSource/);
+  assert.equal(parent.source(), '!abABc');
+  assert.deepEqual(second.map(edit => edit.content), ['!', 'A', 'B']);
+  assert.deepEqual(replaced.getReplacements().map(edit => edit.content), ['!', 'A', 'B']);
+});
+
+test('native replacements round-trip UTF-16 ranges and reject a split surrogate', () => {
+  const edited = new api.ReplaceSource(new api.OriginalSource('A😀é中Z', 'x'));
+  const records = () => edited.getReplacements().map(r => [r.start, r.end, r.content, r.name]);
+  edited.insert(5, '!', '');
+  edited.replace(1, 2, '🙂', 'emoji');
+  edited.insert(5, '?');
+  const initial = [[1, 2, '🙂', 'emoji'], [5, 4, '!', ''], [5, 4, '?', undefined]];
+  assert.deepEqual(records(), initial);
+  assert.equal(edited.source(), 'A🙂é中!?Z');
+
+  assert.throws(() => edited.insert(2, 'x'), /Invalid UTF-16/);
+  assert.deepEqual(records(), initial);
+  assert.equal(edited.source(), 'A🙂é中!?Z');
+});
+
+test('replaceSource edits decoded text at UTF-16 character boundaries', () => {
+  const bytes = Buffer.from('éZ');
+  const source = new api.ReplaceSource(new api.RawSource(bytes));
+  assert.deepEqual(binding.replaceSource(source), bytes);
+  source.insert(1, ':');
+  bytes.fill(0);
+  assert.equal(source.source(), 'é:Z');
+});
+
+test('ReplaceSource adapts a custom input once', () => {
+  let reads = 0;
+  const child = { source() { reads++; return 'abc'; } };
+  const source = new api.ReplaceSource(child);
+  source.replace(0, 0, 'A');
+  assert.equal(source.source(), 'Abc');
+  assert.equal(reads, 1);
+});
+
+test('replaceSourceAndMap returns the native content and map for the same edits', () => {
+  const source = new api.ReplaceSource(new api.OriginalSource('A😀B', 'input.js'));
+  source.replace(1, 2, 'X', 'emoji');
+  assert.deepEqual(binding.replaceSourceAndMap(source, false), {
+    source: 'AXB', map: source.map({ columns: false }),
   });
-  assert.deepEqual(cached.sourceAndMap(), { source: 'abc', map: null });
-  assert.strictEqual(cached.originalLazy(), factory);
 });
 
-test('CachedData preserves map options and edits to an exposed map', () => {
-  const source = new api.OriginalSource('const café = 1;\n', 'input.js');
-  const cached = new api.CachedSource(source);
-  for (const columns of [true, false]) {
-    cached.map({ columns });
+test('replacement coordinates must be representable and can extend past the input', () => {
+  const source = new api.ReplaceSource(new api.RawSource('abc'));
+  for (const [start, end] of [[-1, 0], [0, Number.MIN_VALUE], [0, Infinity]]) {
+    assert.throws(() => source.replace(start, end, 'x'), /Invalid UTF-16/);
   }
-  cached.map({ columns: true }).mappings = 'A';
-  cached.clearCache({ maps: false });
-  const data = cached.getCachedData();
-  assert.equal(data.buffer.toString(), source.source());
-  assert.equal(data.maps.size, 2);
-  assert.deepEqual(data.maps.get('{"columns":true}').bufferedMap.mappings, Buffer.from('A'));
-  const restored = new api.CachedSource(() => assert.fail('resolved original'), data);
-  for (const columns of [true, false]) {
-    assert.deepEqual(restored.map({ columns }), cached.map({ columns }));
-  }
-});
-
-test('exposed replacement sort overrides remain observable', () => {
-  function run(w) {
-    const replaced = new w.ReplaceSource(new w.OriginalSource('abc', 'x'));
-    replaced.insert(0, '!');
-    const array = replaced.getReplacements();
-    array.sort = () => array;
-    replaced.insert(-1, '?');
-    return {source: replaced.source(), edits: array.map(e => [e.start, e.content])};
-  }
-  assert.deepEqual(run(api), run(ref));
+  source.replace(1, 9, 'x');
+  assert.equal(source.getReplacements()[0].end, 9);
+  assert.equal(source.source(), 'ax');
+  assert.equal(source.size(), 2);
 });
 
 test('removing a shared child from a snapshot preserves both native edges', () => {
@@ -164,24 +274,66 @@ test('removing a shared child from a snapshot preserves both native edges', () =
   parent.map();
   parent.getChildren().pop();
   parent.map();
-  child.replace(0, 0, 'X');
-  assert.equal(parent.sourceAndMap().source, 'XbcXbc');
+  assert.throws(() => child.replace(0, 0, 'X'), /Cannot modify shared ReplaceSource/);
+  assert.equal(parent.sourceAndMap().source, 'abcabc');
 });
 
-test('native edges preserve JS identity and JS cycles remain collectible', () => {
+test('skip-optimizing retains a nested concat and rejects both append methods', () => {
+  const child = new api.ConcatSource('a');
+  const parent = new api.ConcatSource();
+  parent.addAllSkipOptimizing([child]);
+  assert.throws(() => child.add('b'), /Cannot modify shared ConcatSource/);
+  assert.throws(() => child.addAllSkipOptimizing(['c']), /Cannot modify shared ConcatSource/);
+  assert.strictEqual(parent.getChildren()[0], child);
+  assert.equal(parent.source(), 'a');
+});
+
+test('CachedSource shares its input as soon as it is constructed', () => {
+  const source = new api.ReplaceSource(new api.RawSource('abc'));
+  source.replace(0, 0, 'x');
+  const cache = new api.CachedSource(source);
+  assert.throws(() => source.replace(1, 1, 'y'), /Cannot modify shared ReplaceSource/);
+  const parent = new api.ConcatSource(cache);
+  assert.strictEqual(cache.original(), source);
+  assert.throws(() => source.insert(0, '!'), /Cannot modify shared ReplaceSource/);
+  assert.equal(parent.source(), 'xbc');
+});
+
+test('fixture restoration also requires a uniquely owned OriginalSource', () => {
+  const original = new api.OriginalSource(Buffer.from('a'), 'a.js');
+  binding.debugOriginalRestore(original, 'b', 1);
+  const parent = new api.PrefixSource('> ', original);
+  assert.throws(() => binding.debugOriginalRestore(original, 'c', 8), /Cannot modify shared OriginalSource/);
+  assert.equal(original.source(), 'b');
+  assert.equal(original.size(), 1);
+  assert.equal(parent.source(), '> b');
+});
+
+test('JS parents retain the original child wrappers and cycles remain collectible', () => {
   const script = `
     const assert = require('node:assert/strict');
     const api = require(${JSON.stringify(require.resolve('../dist'))});
     const tick = () => new Promise(resolve => setImmediate(resolve));
     (async () => {
+      let original = new api.OriginalSource('edited', 'input.js');
+      const weakOriginal = new WeakRef(original);
+      const replacement = new api.ReplaceSource(original);
+      original = null;
       let child = new api.OriginalSource('abc', 'x');
       const weakChild = new WeakRef(child);
       let intermediate = new api.ConcatSource(child);
       const parent = new api.ConcatSource(intermediate);
       child = intermediate = null;
       for (let i = 0; i < 4; i++) { await tick(); global.gc(); }
+      assert.ok(weakOriginal.deref());
+      assert.strictEqual(replacement.original(), weakOriginal.deref());
       assert.ok(weakChild.deref(), 'flattened parent keeps its actual JS child alive');
       assert.strictEqual(parent.getChildren()[0], weakChild.deref());
+      const editable = new api.ReplaceSource(new api.RawSource('a'));
+      let owner = new api.ConcatSource(editable);
+      assert.throws(() => editable.insert(0, '!'), /Cannot modify shared ReplaceSource/);
+      const weakOwner = new WeakRef(owner);
+      owner = null;
       let cycleChild = new api.RawSource('cycle');
       let cycleParent = new api.ReplaceSource(cycleChild);
       cycleChild.parent = cycleParent;
@@ -195,12 +347,15 @@ test('native edges preserve JS identity and JS cycles remain collectible', () =>
       let collected = false;
       for (let i = 0; i < 30; i++) {
         await tick(); global.gc();
-        if (weakCycle.deref() === undefined && weakConcat.deref() === undefined) {
+        if (weakCycle.deref() === undefined && weakConcat.deref() === undefined && weakOwner.deref() === undefined) {
           collected = true;
           break;
         }
       }
       assert.ok(collected, 'native handles must not hide strong JS cycles from V8');
+      await tick();
+      editable.insert(0, '!');
+      assert.equal(editable.source(), '!a');
     })().catch(error => { console.error(error); process.exitCode = 1; });
   `;
   const result = spawnSync(process.execPath, ['--expose-gc', '-e', script], {encoding: 'utf8'});

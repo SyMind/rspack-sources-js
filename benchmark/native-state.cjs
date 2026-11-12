@@ -4,22 +4,23 @@ const binding = require('../dist/binding');
 module.exports = {
   restoreOriginal(api, fields) {
     const source = new api.OriginalSource(fields._valueAsBuffer ?? fields._value, fields._name);
-    binding.debugOriginalRestore(source, fields._value, fields._cachedSize);
+    binding.debugOriginalRestore(source, fields._value);
     return source;
   },
   restoreCached(api, fields) {
-    const source = new api.CachedSource(fields._source, {
-      source: fields._cachedSourceType,
-      buffer: fields._cachedBuffer,
-      size: fields._cachedSize,
-      maps: fields._cachedMaps,
-      hash: fields._cachedHashUpdate,
-    });
-    // These two native values are captured separately from constructor cache data.
-    for (const name of ['_cachedSource', '_cachedBuffers']) {
-      if (fields[name] !== undefined) binding.debugSourceSetField(source, name, fields[name]);
+    const source = new api.CachedSource(fields._source);
+    if (fields._cachedSource !== undefined || fields._cachedSourceType !== undefined) source.source();
+    if (fields._cachedSize !== undefined) source.size();
+    for (const key of fields._cachedMaps?.keys() ?? []) {
+      source.map(JSON.parse(key));
     }
+    if (fields._cachedHashUpdate !== undefined) source.updateHash({ update() {} });
     return source;
   },
-  set: binding.debugSourceSetField,
+  restoreRaw(api, fields) {
+    const source = new api.RawSource(fields._valueAsBuffer ?? fields._value, !fields._valueIsBuffer);
+    if (fields._value !== undefined && !fields._valueIsBuffer) source.source();
+    if (fields._cachedSize !== undefined) source.size();
+    return source;
+  },
 };

@@ -6,7 +6,6 @@ import { getCodspeedRunnerMode, getV8Flags } from '@codspeed/core';
 
 const require = createRequire(import.meta.url);
 const api = require('../dist');
-const { contextOf } = require('../dist/nativeContext');
 const binding = require('../dist/binding');
 const { internString } = require('../dist/helpers/stringBufferUtils');
 if (typeof binding.rawBenchmarkGenericNew !== 'function') {
@@ -27,14 +26,14 @@ class GenericRawSource extends api.Source {
   constructor(value, convertToString = false) {
     super();
     if (typeof value === 'string') value = internString(value);
-    binding.rawBenchmarkGenericNew(this, contextOf(this), 'raw', [value, convertToString]);
+    binding.rawBenchmarkGenericNew(this, 'raw', [value, convertToString]);
   }
 }
 class DirectRawSource extends api.Source {
   constructor(value, convertToString = false) {
     super();
     if (typeof value === 'string') value = internString(value);
-    binding.rawNew(this, contextOf(this), value, convertToString);
+    binding.rawNew(this, value, convertToString);
   }
 }
 for (const Class of [GenericRawSource, DirectRawSource]) {
@@ -57,7 +56,7 @@ for (const fixture of fixtures) {
   const expected = Buffer.isBuffer(fixture.value) && fixture.convert ? fixture.value.toString('utf8') : fixture.value;
   for (const Class of [GenericRawSource, DirectRawSource]) {
     const instance = new Class(fixture.value, fixture.convert);
-    assert.strictEqual(instance.source(), expected);
+    assert.deepStrictEqual(instance.source(), expected);
     assert.equal(instance.isBuffer(), Buffer.isBuffer(fixture.value) && !fixture.convert);
     assert.equal(instance.size(), Buffer.byteLength(fixture.value));
     assert.deepEqual(Object.getOwnPropertyNames(instance), []);
@@ -73,30 +72,28 @@ for (const scope of ['native-entry', 'constructor']) {
   for (const fixture of fixtures) {
     const name = `${scope}/${fixture.name}/x${batch}`;
     if (filter && !name.includes(filter)) continue;
-    let receivers, stores;
+    let receivers;
     bench.add(name, () => {
       if (scope === 'constructor') {
         for (let i = 0; i < batch; i++) receivers[i] = new Constructor(fixture.value, fixture.convert);
       } else if (variant === 'generic') {
-        for (let i = 0; i < batch; i++) binding.rawBenchmarkGenericNew(receivers[i], stores[i], 'raw', [fixture.value, fixture.convert]);
+        for (let i = 0; i < batch; i++) binding.rawBenchmarkGenericNew(receivers[i], 'raw', [fixture.value, fixture.convert]);
       } else {
-        for (let i = 0; i < batch; i++) binding.rawNew(receivers[i], stores[i], fixture.value, fixture.convert);
+        for (let i = 0; i < batch; i++) binding.rawNew(receivers[i], fixture.value, fixture.convert);
       }
     }, {
       beforeEach() {
         receivers = new Array(batch);
         if (scope === 'native-entry') {
-          stores = new Array(batch);
           for (let i = 0; i < batch; i++) {
             receivers[i] = Object.create(api.RawSource.prototype);
-            stores[i] = contextOf(receivers[i]);
           }
         }
       },
       afterEach() {
         // Include real native allocation/wrapping, exclude collection in both
         // variants; retaining every receiver prevents mid-batch reclamation.
-        receivers = stores = undefined;
+        receivers = undefined;
         global.gc();
       },
     });
@@ -105,7 +102,7 @@ for (const scope of ['native-entry', 'constructor']) {
 if (!bench.tasks.length) throw new Error(`No benchmark matches ${filter}`);
 console.log(JSON.stringify({
   variant, codspeedMode: mode, batch, platform: `${process.platform}-${process.arch}`, node: process.version,
-  semantics: 'native-entry excludes receiver/store preparation; constructor includes it; both construct the same Rust SourceNode and snapshot; GC outside timed batches; divide each measurement by batch for per-source cost',
+  semantics: 'native-entry excludes receiver preparation; constructor includes it; both construct the same Rust RawSource binding; GC outside timed batches; divide each measurement by batch for per-source cost',
   fixtures: fixtures.map(({ name, value, convert }) => ({ name, bytes: Buffer.byteLength(value), convert })),
 }));
 bench.runSync();

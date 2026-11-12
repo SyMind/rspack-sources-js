@@ -4,9 +4,10 @@
 use triomphe::ThinArc;
 
 use crate::{
-  CachedSource, ConcatSource, MappingSource, OriginalSource, RawBufferSource, RawStringSource,
-  ReplaceSource, ReplacementEnforce, Source, SourceExt, SourceMap, SourceMapSource,
-  SourceMapSourceOptions, SourceRef, mapping_source::Data, source::shared_slice,
+  CachedSource, CompatSource, ConcatSource, MappingSource, OriginalSource, PrefixSource,
+  RawBufferSource, RawStringSource, ReplaceSource, ReplacementEnforce, SizeOnlySource, Source,
+  SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions, SourceRef, mapping_source::Data,
+  source::shared_slice,
 };
 
 /// Source map fields stored without an intermediate JSON representation.
@@ -116,7 +117,7 @@ pub enum CacheableSource {
     value: String,
     /// The source name.
     name: String,
-    /// The source map JSON.
+    /// The source map JSON, or an empty string for an unmapped source.
     source_map: String,
     /// The optional original source.
     original_source: Option<String>,
@@ -156,6 +157,18 @@ pub enum CacheableSource {
     inner: Box<CacheableSource>,
     replacements: Vec<(usize, usize, String)>,
   },
+  Prefix {
+    prefix: String,
+    #[rkyv(omit_bounds)]
+    inner: Box<CacheableSource>,
+  },
+  SizeOnly {
+    size: usize,
+  },
+  Compat {
+    #[rkyv(omit_bounds)]
+    inner: Box<CacheableSource>,
+  },
 }
 
 /// Convert a [`Source`] trait object into a serializable [`CacheableSource`].
@@ -177,6 +190,21 @@ pub fn to_cacheable(source: &dyn Source) -> CacheableSource {
   }
   if let Some(s) = source.as_any().downcast_ref::<CachedSource>() {
     return CacheableSource::Cached {
+      inner: Box::new(to_cacheable(s.inner().as_ref())),
+    };
+  }
+
+  if let Some(s) = source.as_any().downcast_ref::<PrefixSource>() {
+    return CacheableSource::Prefix {
+      prefix: s.prefix().to_owned(),
+      inner: Box::new(to_cacheable(s.inner().as_ref())),
+    };
+  }
+  if let Some(s) = source.as_any().downcast_ref::<SizeOnlySource>() {
+    return CacheableSource::SizeOnly { size: s.size() };
+  }
+  if let Some(s) = source.as_any().downcast_ref::<CompatSource>() {
+    return CacheableSource::Compat {
       inner: Box::new(to_cacheable(s.inner().as_ref())),
     };
   }
@@ -204,7 +232,7 @@ pub fn to_cacheable(source: &dyn Source) -> CacheableSource {
     return CacheableSource::SourceMap {
       value: s.value().to_string(),
       name: s.name().to_string(),
-      source_map: s.source_map().to_json(),
+      source_map: s.input_map().map(SourceMap::to_json).unwrap_or_default(),
       original_source: s.original_source().map(|v| v.to_string()),
       inner_source_map: s.inner_source_map().map(|m| m.to_json()),
       remove_original_source: s.remove_original_source(),
@@ -264,6 +292,11 @@ pub fn from_cacheable(cacheable: CacheableSource) -> SourceRef {
         .with_replacements(replacements, inner.size())
         .boxed()
     }
+    CacheableSource::Prefix { prefix, inner } => {
+      PrefixSource::new(prefix, from_cacheable(*inner)).boxed()
+    }
+    CacheableSource::SizeOnly { size } => SizeOnlySource(size).boxed(),
+    CacheableSource::Compat { inner } => CompatSource::new(from_cacheable(*inner)).boxed(),
     CacheableSource::RawBuffer { buffer } => RawBufferSource::from(buffer).boxed(),
     CacheableSource::RawString { value } => RawStringSource::from(value).boxed(),
     CacheableSource::Original { value, name } => OriginalSource::new(value, name).boxed(),
@@ -275,6 +308,15 @@ pub fn from_cacheable(cacheable: CacheableSource) -> SourceRef {
       inner_source_map,
       remove_original_source,
     } => {
+      if source_map.is_empty() {
+        return SourceMapSource::without_map(
+          value,
+          name,
+          original_source.map(Into::into),
+          remove_original_source,
+        )
+        .boxed();
+      }
       let source_map = SourceMap::from_json(source_map).expect("invalid source map JSON");
       let inner_source_map = inner_source_map.and_then(|json| SourceMap::from_json(json).ok());
       SourceMapSource::new(SourceMapSourceOptions {

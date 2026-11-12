@@ -76,7 +76,9 @@ function restoreGraph(graph, api, nativeState) {
       if (record.type === 'replacement') result = new api.ReplaceSource.Replacement(fields.start, fields.end, fields.content, fields.name);
       else switch (record.kind) {
         case 'Source': result = new api.Source(); break;
-        case 'RawSource': result = new api.RawSource(fields._value ?? fields._valueAsString ?? fields._valueAsBuffer); break;
+        case 'RawSource':
+          result = nativeState ? nativeState.restoreRaw(api, fields) : new api.RawSource(fields._value ?? fields._valueAsString ?? fields._valueAsBuffer);
+          break;
         case 'OriginalSource':
           result = nativeState ? nativeState.restoreOriginal(api, fields) : new api.OriginalSource(fields._value ?? fields._valueAsBuffer, fields._name);
           break;
@@ -85,14 +87,21 @@ function restoreGraph(graph, api, nativeState) {
           fields._sourceMapAsObject ?? fields._sourceMapAsString ?? fields._sourceMapAsBuffer,
           fields._hasOriginalSource ? fields._originalSourceAsString ?? fields._originalSourceAsBuffer : undefined,
           fields._hasInnerSourceMap ? fields._innerSourceMapAsObject ?? fields._innerSourceMapAsString ?? fields._innerSourceMapAsBuffer : undefined,
-          fields._removeOriginalSource); break;
+          fields._removeOriginalSource);
+          if (nativeState && fields._sourceMapAsBuffer !== undefined && fields._sourceMapAsObject !== undefined) result.getArgsAsBuffers();
+          break;
         case 'ConcatSource':
           if (nativeState && fields._isOptimized) {
             result = new api.ConcatSource();
             result.addAllSkipOptimizing(fields._children);
           } else result = new api.ConcatSource(...fields._children);
           break;
-        case 'ReplaceSource': result = new api.ReplaceSource(fields._source, fields._name); break;
+        case 'ReplaceSource':
+          result = new api.ReplaceSource(fields._source, fields._name);
+          if (nativeState) {
+            for (const edit of fields._replacements) result.replace(edit.start, edit.end, edit.content, edit.name);
+          }
+          break;
         case 'CachedSource':
           result = nativeState ? nativeState.restoreCached(api, fields) : new api.CachedSource(fields._source);
           break;
@@ -108,11 +117,9 @@ function restoreGraph(graph, api, nativeState) {
     }
     memo.set(id, result);
     for (const [name, item, enumerable, writable, configurable] of record.properties ?? []) {
-      if (nativeState && (record.kind === 'OriginalSource' || record.kind === 'CachedSource') && name.startsWith('_')) continue;
-      if (nativeState && record.kind === 'ConcatSource' && (name === '_children' || name === '_isOptimized')) continue;
+      if (nativeState && record.type === 'source' && name.startsWith('_')) continue;
       const value = decode(item);
-      if (nativeState && record.type === 'source' && name.startsWith('_')) nativeState.set(result, name, value);
-      else if (record.type === 'array' && String(result.length) === name && enumerable && writable && configurable) result.push(value);
+      if (record.type === 'array' && String(result.length) === name && enumerable && writable && configurable) result.push(value);
       else if (name !== '__proto__' && enumerable && writable && configurable) result[name] = value;
       else Object.defineProperty(result, name, { value, enumerable, writable, configurable });
     }

@@ -8,211 +8,89 @@ pub mod replace;
 pub mod size_only;
 pub mod source_map;
 
-use crate::{
-    js::Js,
-    model::{Field, Kind, SourceNode, prepare_concat, snapshot, source_text},
+use crate::{invalid, maps::parse_map, source_binding::binding_of};
+use napi::{Result, ValueType, bindgen_prelude::*};
+use napi_derive::napi;
+use rspack_sources::{
+    MapOptions, RawBufferSource, RawStringSource, Source, SourceExt, SourceMapSource, SourceRef,
+    SourceValue, WithoutOriginalOptions,
 };
-use napi::{Result, sys};
-use rspack_sources::{Source, SourceRef};
-use std::{collections::HashSet, rc::Rc};
+use serde_json::Value;
 
-pub(crate) fn initial_snapshot(n: &Rc<SourceNode>) -> Result<Option<SourceRef>> {
-    match n.kind {
-        Kind::Raw => raw::initial(n),
-        Kind::Original => Ok(n.original.as_ref().and_then(|s| s.snapshot())),
-        Kind::Replace => replace::initial(n),
-        _ => Ok(None),
-    }
-}
-
-pub(crate) fn validate_snapshot(n: &Rc<SourceNode>) -> Result<bool> {
-    match n.kind {
-        Kind::Raw => raw::validate(n),
-        Kind::Original => Ok(n.snapshot.borrow().is_some()),
-        Kind::SourceMap => source_map::validate(n),
-        Kind::Concat => concat::validate(n),
-        Kind::Replace => n.sort_edits(),
-        _ => Ok(false),
-    }
-}
-
-pub(crate) fn compile_snapshot(
-    n: &Rc<SourceNode>,
-    children: Vec<SourceRef>,
-) -> Result<Option<SourceRef>> {
-    match n.kind {
-        Kind::Raw => raw::compile(n, children),
-        Kind::SourceMap => source_map::compile(n, children),
-        Kind::Replace => replace::compile(n, children),
-        _ => Ok(None),
-    }
-}
-
-pub(crate) fn text(
-    n: &Rc<SourceNode>,
-    visiting: &mut HashSet<*const SourceNode>,
-) -> Result<Option<Vec<u16>>> {
-    match n.kind {
-        Kind::Raw => Ok(n.text("_value")),
-        Kind::Original => Ok(original::text(n)),
-        Kind::SourceMap => Ok(n.text("_valueAsString")),
-        Kind::Cached => {
-            if let Some(text) = n.cache().borrow().text() {
-                return Ok(Some(text.encode_utf16().collect()));
-            }
-            Ok(n.text("_cachedSource"))
-        }
-        Kind::Concat => concat::text(n, visiting),
-        Kind::Replace => replace::text(n, visiting),
-        Kind::Prefix => prefix::text(n, visiting),
-        _ => Ok(None),
-    }
-}
-
-pub(crate) fn leaf_source(n: &Rc<SourceNode>, key: &str) -> Result<Js> {
-    let value = n.get(key)?;
-    if !value.is_undefined()? {
-        return Ok(value);
-    }
-    let buffer = n.get("_valueAsBuffer")?;
-    let value = if buffer.is_buffer()? {
-        let text = String::from_utf8_lossy(&buffer.bytes()?).into_owned();
-        Js::string(n.store.env, &text)?
+pub(crate) fn text(value: Unknown<'_>) -> Result<String> {
+    if value.is_buffer()? {
+        Ok(String::from_utf8_lossy(&unsafe { value.cast::<BufferSlice>()? }).into_owned())
+    } else if value.get_type()? == ValueType::String {
+        unsafe { value.cast::<String>() }
     } else {
-        buffer.method("toString", &[Js::string(n.store.env, "utf8")?])?
+        Err(invalid("Expected a string or Buffer"))
+    }
+}
+
+pub(crate) fn raw_input(value: Unknown<'_>, convert_to_string: bool) -> Result<SourceRef> {
+    if value.is_buffer()? && !convert_to_string {
+        Ok(RawBufferSource::from(unsafe { value.cast::<BufferSlice>()? }.to_vec()).boxed())
+    } else {
+        Ok(RawStringSource::from(text(value)?).boxed())
+    }
+}
+
+pub(crate) fn bound_input(value: Unknown<'_>) -> Result<SourceRef> {
+    if let Some(binding) = binding_of(value)? {
+        return Ok(binding.source());
+    }
+    // Adapt external JS input once, before putting it into the immutable Rust graph.
+    let object: Object = unsafe { value.cast()? };
+    let pair: Option<Function<(), Object>> = object.get_named_property("sourceAndMap")?;
+    let (content, map) = if let Some(pair) = pair {
+        let pair = pair.apply(object, ())?;
+        (
+            pair.get_named_property("source")?,
+            parse_map(pair.get_named_property("map")?)?,
+        )
+    } else {
+        let source: Function<(), Unknown> = object.get_named_property("source")?;
+        let content = source.apply(object, ())?;
+        let map: Option<Function<(), Unknown>> = object.get_named_property("map")?;
+        (
+            content,
+            match map {
+                Some(map) => parse_map(map.apply(object, ())?)?,
+                None => None,
+            },
+        )
     };
-    if n.helper("dual", &[])?.truthy()? {
-        n.put(key, value)?;
-    }
-    Ok(value)
-}
-
-pub(crate) fn leaf_buffer(n: &Rc<SourceNode>, key: &str) -> Result<Js> {
-    let value = n.get("_valueAsBuffer")?;
-    if !value.is_undefined()? {
-        return Ok(value);
-    }
-    let value = if let Some(source) = n.snapshot.borrow().as_ref() {
-        // Raw and SourceMap snapshots already own the generated UTF-8.
-        // Give JS a writable copy without aliasing the snapshot.
-        Js::buffer(n.store.env, &source.buffer())?
-    } else if let Field::Text(text) = n.field(key) {
-        Js::buffer(
-            n.store.env,
-            String::from_utf16_lossy(&text.units).as_bytes(),
-        )?
-    } else {
-        Js::buffer_constructor(n.store.env)?
-            .method("from", &[n.get(key)?, Js::string(n.store.env, "utf8")?])?
-    };
-    if n.helper("dual", &[])?.truthy()? {
-        n.put("_valueAsBuffer", value)?;
-    }
-    Ok(value)
-}
-
-pub(crate) fn leaf_size(n: &Rc<SourceNode>, key: &str) -> Result<Js> {
-    let cached = n.get("_cachedSize")?;
-    if !cached.is_undefined()? {
-        return Ok(cached);
-    }
-    let buffer = n.get("_valueAsBuffer")?;
-    let size = if buffer.is_buffer()? {
-        Some(buffer.bytes()?.len())
-    } else {
-        n.text(key)
-            .map(|text| String::from_utf16_lossy(&text).len())
-    };
-    let value = match size {
-        Some(size) => Js::number(n.store.env, size as f64)?,
-        None if buffer.is_undefined()? => Js::buffer_constructor(n.store.env)?.method(
-            "byteLength",
-            &[n.get(key)?, Js::string(n.store.env, "utf8")?],
-        )?,
-        None => buffer.get("length")?,
-    };
-    n.put("_cachedSize", value)?;
-    Ok(value)
-}
-
-pub(crate) fn composite_source(n: &Rc<SourceNode>) -> Result<Js> {
-    if let Some(text) = source_text(n, &mut HashSet::new())? {
-        Js::utf16(n.store.env, &text)
-    } else {
-        Js::undefined(n.store.env)
+    match map {
+        Some(source_map) => Ok(SourceMapSource::new(WithoutOriginalOptions {
+            value: text(content)?,
+            name: source_map.file().unwrap_or_default().to_owned(),
+            source_map,
+        })
+        .boxed()),
+        None => raw_input(content, false),
     }
 }
 
-pub(crate) fn composite_buffer(n: &Rc<SourceNode>) -> Result<Js> {
-    if let Some(text) = source_text(n, &mut HashSet::new())? {
-        Js::buffer(n.store.env, String::from_utf16_lossy(&text).as_bytes())
-    } else {
-        Js::undefined(n.store.env)
+pub(crate) fn js_source(value: SourceValue<'_>) -> Either<String, Buffer> {
+    match value {
+        SourceValue::String(s) => Either::A(s.into_owned()),
+        SourceValue::Buffer(b) => Either::B(b.into_owned().into()),
     }
 }
 
-pub(crate) fn single_buffer(env: sys::napi_env, buffer: Js) -> Result<Js> {
-    if buffer.is_undefined()? {
-        Ok(buffer)
-    } else {
-        Js::array(env, &[buffer])
-    }
+#[napi(object, object_from_js = false)]
+pub struct SourceAndMap {
+    pub source: Either<String, Buffer>,
+    pub map: Value,
 }
 
-pub(crate) fn buffer_size(buffer: Js) -> Result<Js> {
-    if buffer.is_undefined()? {
-        Ok(buffer)
-    } else {
-        Js::number(buffer.env, buffer.bytes()?.len() as f64)
-    }
+pub(crate) fn source_map(source: &dyn Source, columns: bool) -> Result<Value> {
+    Ok(serde_json::to_value(source.map(&MapOptions::new(columns)))?)
 }
 
-pub(crate) fn map_result(n: &Rc<SourceNode>, options: Js, include_source: bool) -> Result<Js> {
-    let columns = n.helper("columns", &[options])?;
-    let columns = if columns.is_undefined()? {
-        None
-    } else {
-        Some(columns.truthy()?)
-    };
-    map_result_columns(n, columns, include_source)
-}
-
-pub(crate) fn map_result_columns(
-    n: &Rc<SourceNode>,
-    columns: Option<bool>,
-    include_source: bool,
-) -> Result<Js> {
-    if let Some(columns) = columns {
-        let read = |source: &dyn Source| -> Result<_> {
-            let map = crate::diagnostics::source_map(source, columns)?;
-            let text = include_source.then(|| source.source().into_string_lossy().into_owned());
-            Ok((map, text))
-        };
-        let output = if n.kind == Kind::Concat {
-            if prepare_concat(n)? {
-                Some(read(&*n.concat().source.borrow())?)
-            } else {
-                None
-            }
-        } else {
-            snapshot(n)?.as_deref().map(read).transpose()?
-        };
-        if let Some((map, text)) = output {
-            crate::diagnostics::STATS.with(|s| s.borrow_mut().native_reads += 1);
-            let map = crate::diagnostics::map_value(n.store.env, map)?;
-            return match text {
-                Some(text) => pair(n, Js::string(n.store.env, &text)?, map),
-                None => Ok(map),
-            };
-        }
-    }
-    crate::diagnostics::STATS.with(|s| s.borrow_mut().fallbacks += 1);
-    Js::undefined(n.store.env)
-}
-
-pub(crate) fn pair(n: &Rc<SourceNode>, source: Js, map: Js) -> Result<Js> {
-    let result = Js::object(n.store.env)?;
-    result.set("source", source)?;
-    result.set("map", map)?;
-    Ok(result)
+pub(crate) fn source_and_map(source: &dyn Source, columns: bool) -> Result<SourceAndMap> {
+    Ok(SourceAndMap {
+        source: js_source(source.source()),
+        map: source_map(source, columns)?,
+    })
 }

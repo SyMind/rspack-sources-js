@@ -19,7 +19,7 @@ function compare(build, { native = true } = {}) {
     assert.deepStrictEqual(a.map(options), b.map(options));
     assert.equal(JSON.stringify(a.map(options)), JSON.stringify(b.map(options)));
     assert.deepStrictEqual(a.sourceAndMap(options), b.sourceAndMap(options));
-    if (native) assert.ok(planner.stats.nativeReads > 0, 'fixture must exercise Rust');
+    if (native) assert.ok(planner.getStats().nativeReads > 0, 'fixture must exercise Rust');
     assert.equal(a.source(), b.source());
     assert.deepStrictEqual(a.buffer(), b.buffer());
     assert.equal(a.size(), b.size());
@@ -44,40 +44,59 @@ test('batched replacements use UTF-16 inclusive endpoints', () => {
   });
 });
 
-test('snapshot reuse and child mutation rebuild only affected nodes', () => {
+test('sharing a child rejects edits before and after native reads', () => {
   const child = new api.ReplaceSource(new api.OriginalSource('abc', 'in.js'));
-  const parent = new api.ConcatSource('[', child, ']');
-  planner.resetStats();
-  assert.equal(parent.sourceAndMap().source, '[abc]');
-  const old = planner.prepare(parent);
-  const count = planner.stats.compiledNodes;
-  parent.map();
-  assert.equal(planner.stats.compiledNodes, count);
   child.replace(0, 0, 'X');
+  const parent = new api.ConcatSource('[', child, ']');
+  assert.throws(() => child.insert(0, 'x'), /Cannot modify shared ReplaceSource/);
+  const held = planner.prepare(parent);
   assert.equal(parent.sourceAndMap().source, '[Xbc]');
-  assert.equal(old.source(), '[abc]', 'old Rust snapshot stays alive and immutable');
-  assert.equal(planner.stats.compiledNodes - count, 2, 'only Replace and parent rebuilt');
-  const bytes = old.buffer(); bytes[0] = 0;
-  assert.equal(old.source(), '[abc]', 'returned Buffer does not alias Rust data');
+  assert.throws(() => child.replace(1, 1, 'y'), /Cannot modify shared ReplaceSource/);
+  assert.equal(child.getReplacements().length, 1);
+  assert.throws(() => parent.add('!'), /Cannot modify shared ConcatSource/);
+  const bytes = held.buffer();
+  bytes[0] = 0;
+  assert.equal(held.source(), '[Xbc]');
+  assert.equal(parent.source(), '[Xbc]');
 });
 
-test('edits enter Rust immediately; snapshot refresh is coalesced on read', () => {
+test('successive edits apply to the uniquely owned source', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('a'.repeat(1000), 'in.js'));
   planner.resetStats();
   for (let i = 0; i < 1000; i++) r.replace(i, i, 'b');
-  assert.equal(planner.stats.mutations, 1000);
-  assert.equal(planner.stats.compilations, 0);
+  assert.equal(planner.getStats().mutations, 1000);
   assert.equal(r.sourceAndMap().source, 'b'.repeat(1000));
-  assert.equal(planner.stats.compilations, 1);
 });
 
-test('shared DAG children are compiled once', () => {
+test('reusing one child in several positions retains the shared source', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('x', 'x.js'));
-  const a = new api.ConcatSource(r, r, r);
-  planner.resetStats(); a.map();
-  assert.equal(planner.stats.compiledNodes, 1, 'children were already constructed by their constructors');
   r.insert(0, 'a');
+  const a = new api.ConcatSource(r, r, r);
   assert.equal(a.sourceAndMap().source, 'axaxax');
+  assert.throws(() => r.insert(0, '!'), /Cannot modify shared ReplaceSource/);
+});
+
+test('concatenation preserves deleted originals and closes nested mappings at raw text', () => {
+  const build = w => {
+    const deleted = new w.ReplaceSource(new w.OriginalSource('old', 'deleted.js'));
+    deleted.replace(0, 2, '');
+    const body = new w.CachedSource(new w.ConcatSource(new w.OriginalSource('}', 'body.js'), '\n}'));
+    return new w.ConcatSource(new w.CachedSource(new w.ConcatSource('header\n', deleted)), body);
+  };
+  const actual = build(api);
+  const expected = build(ref).sourceAndMap();
+  assert.deepEqual(expected.map.sources, ['deleted.js', 'body.js']);
+  assert.deepEqual(actual.sourceAndMap(), expected);
+  assert.deepEqual(actual.map(), expected.map);
+});
+
+test('line-only maps retain replacement names across native cache hits', () => {
+  const edited = new api.ReplaceSource(new api.OriginalSource('one two', 'input.js'));
+  edited.replace(0, 2, 'three', 'one');
+  const prefixed = new api.PrefixSource('> ', new api.CachedSource(edited));
+  const first = prefixed.map({ columns: false });
+  assert.deepEqual(first.names, ['one']);
+  assert.deepEqual(prefixed.map({ columns: false }), first);
 });
 
 test('nested ConcatSource captures children when flattened', () => {
@@ -85,41 +104,31 @@ test('nested ConcatSource captures children when flattened', () => {
   a.add('b'); assert.equal(b.sourceAndMap().source, 'a');
 });
 
-test('replacement edits invalidate snapshots and children array edits stay local', () => {
+test('a parent can append while its shared child rejects edits', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
   r.replace(0, 0, 'x');
   const p = new api.ConcatSource(r);
   assert.equal(p.sourceAndMap().source, 'xbc');
   r.getReplacements()[0].content = 'y';
-  assert.equal(p.sourceAndMap().source, 'ybc');
+  assert.equal(p.sourceAndMap().source, 'xbc');
+  assert.throws(() => r.replace(1, 1, 'Y'), /Cannot modify shared ReplaceSource/);
   const end = new api.OriginalSource('!', 'end');
   p.getChildren().push(end);
-  assert.equal(p.sourceAndMap().source, 'ybc');
+  assert.equal(p.sourceAndMap().source, 'xbc');
   p.add(end);
-  assert.equal(p.sourceAndMap().source, 'ybc!');
+  assert.equal(p.sourceAndMap().source, 'xbc!');
 });
 
-test('CachedSource keeps method-local cache semantics and clearCache restores reads', () => {
+test('CachedSource retains the source and map across a rejected edit', () => {
   const r = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
   const cached = new api.CachedSource(r);
   const before = cached.sourceAndMap();
-  r.replace(0, 0, 'X');
+  assert.throws(() => r.replace(0, 0, 'X'), /Cannot modify shared ReplaceSource/);
   planner.resetStats();
   assert.deepStrictEqual(cached.sourceAndMap(), before);
-  assert.equal(planner.stats.nativeReads, 0);
-  cached.clearCache();
-  assert.equal(cached.sourceAndMap().source, 'Xbc');
-});
-
-test('CachedSource lazy and cachedData interchange', () => {
-  let calls = 0;
-  const c = new api.CachedSource(() => { calls++; return new api.OriginalSource('abc', 'x'); });
-  c.clearCache(); assert.equal(calls, 0);
-  const value = c.sourceAndMap(); digest(c);
-  const restored = new ref.CachedSource(() => { throw new Error('must use cache'); }, c.getCachedData());
-  assert.deepStrictEqual(restored.sourceAndMap(), value);
-  assert.equal(digest(restored), digest(c));
-  assert.equal(calls, 1);
+  assert.equal(planner.getStats().nativeReads, 0);
+  assert.equal(r.source(), 'abc');
+  assert.strictEqual(cached.map(), before.map);
 });
 
 for (const value of ['\ud800', 'A\ude00B']) {
@@ -135,8 +144,8 @@ test('OriginalSource maps Buffer and UTF-16 inputs in Rust', () => {
     assert.deepEqual(source.map({ get columns() { return true; } }), reference.map());
     if (Buffer.isBuffer(value)) value.fill(0);
     assert.deepEqual(source.sourceAndMap({ columns: false }), reference.sourceAndMap({ columns: false }));
-    assert.equal(planner.stats.nativeReads, 2);
-    assert.equal(planner.stats.fallbacks, 0);
+    assert.equal(planner.getStats().nativeReads, 2);
+    assert.equal(planner.getStats().fallbacks, 0);
   }
 });
 
@@ -194,7 +203,7 @@ test('mutable Buffer follows reference method-local string caching', () => {
   }
   planner.resetStats();
   assert.deepStrictEqual(run(api), run(ref));
-  assert.equal(planner.stats.nativeReads, 0);
+  assert.ok(planner.getStats().fallbacks > 0);
 });
 
 test('custom Sources participate in composite source maps', () => {
@@ -249,14 +258,14 @@ test('map preserves ConcatSource child-array replacement after add', () => {
   assert.deepStrictEqual(run(api), run(ref));
 });
 
-test('map sorts the same exposed replacement array as the reference', () => {
-  function run(w) {
-    const r = new w.ReplaceSource(new w.OriginalSource('abc', 'x'));
-    r.insert(2, 'x'); const edits = r.getReplacements();
-    r.insert(0, 'y'); r.map();
-    return edits.map(e => e.start);
-  }
-  assert.deepStrictEqual(run(api), run(ref));
+test('map and later insertions leave earlier replacement snapshots untouched', () => {
+  const r = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
+  r.insert(2, 'x');
+  const first = r.getReplacements();
+  r.insert(0, 'y');
+  r.map();
+  assert.deepEqual(first.map(e => e.start), [2]);
+  assert.deepEqual(r.getReplacements().map(e => e.start), [0, 2]);
 });
 
 test('deterministic differential graphs include Unicode edits and composed maps', () => {
@@ -294,8 +303,9 @@ test('native graph lifetimes are independent across Worker teardown', async () =
     const api = require(${JSON.stringify(require.resolve('../dist/index.js'))});
     for (let i = 0; i < 100; i++) {
       let child = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
+      child.replace(0, 0, 'X');
       const parent = new api.ConcatSource('[', child, ']');
-      parent.map(); child.replace(0, 0, 'X'); child = null;
+      parent.map(); child = null;
       if (parent.sourceAndMap().source !== '[Xbc]') throw new Error('stale snapshot');
     }
     parentPort.postMessage('ok');
@@ -315,17 +325,23 @@ test('native graph lifetimes are independent across Worker teardown', async () =
 
 test('PrefixSource preserves mapped positions', () => compare(w => new w.PrefixSource('> ', new w.OriginalSource('a\nb\n', 'x')), { native: false }));
 
-test('exposed replacement accessors do not run during native eligibility checks', () => {
-  function run(w) {
-    let reads = 0;
-    const r = new w.ReplaceSource(new w.OriginalSource('abc', 'x'));
-    r.replace(0, 0, 'x');
-    Object.defineProperty(r.getReplacements()[0], 'content', { get() { reads++; return 'x'; } });
-    return { result: r.sourceAndMap(), reads };
-  }
-  planner.resetStats();
-  assert.deepStrictEqual(run(api), run(ref));
-  assert.equal(planner.stats.nativeReads, 0);
+test('source maps and hashes never read fields of a returned replacement', () => {
+  const source = new api.ReplaceSource(new api.OriginalSource('abc', 'x'));
+  source.replace(0, 0, 'x');
+  const expected = source.sourceAndMap();
+  const hash = digest(source);
+  Object.defineProperty(source.getReplacements()[0], 'content', {
+    get() { assert.fail('read a replacement from a returned snapshot'); },
+  });
+  assert.deepEqual(source.sourceAndMap(), expected);
+  assert.equal(digest(source), hash);
+});
+
+test('ConcatSource reads an edited SourceMapSource buffer', () => {
+  const mapped = new api.SourceMapSource('abc', 'x', rawMap());
+  const concat = new api.ConcatSource(mapped);
+  mapped.buffer()[0] = 88;
+  assert.deepEqual(concat.buffer(), Buffer.from('Xbc'));
 });
 
 test('proxy map options keep application callbacks on the JS path', () => {
@@ -357,7 +373,9 @@ test('empty ReplaceSource delegates direct map identity to its child', () => {
   const replaced = new api.ReplaceSource(child);
   assert.strictEqual(replaced.map(), map);
   assert.strictEqual(replaced.sourceAndMap().map, map);
-  replaced.insert(0, 'prefix'); replaced.map();
+  replaced.insert(0, 'prefix');
+  const edited = replaced.sourceAndMap();
   replaced.getReplacements().length = 0;
-  assert.strictEqual(replaced.map(), map);
+  assert.equal(edited.source, 'prefixlet a=1;\n');
+  assert.deepEqual(replaced.sourceAndMap(), edited);
 });

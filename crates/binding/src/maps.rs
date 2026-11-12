@@ -1,40 +1,31 @@
-use napi_derive::napi;
+use crate::invalid;
+use napi::{Result, ValueType, bindgen_prelude::*};
 use rspack_sources::SourceMap;
-use std::borrow::Cow;
 
-#[napi(object)]
-#[derive(Clone, PartialEq)]
-pub struct MapInput {
-    pub mappings: String,
-    pub sources: Vec<String>,
-    pub sources_content: Vec<String>,
-    pub names: Vec<String>,
-    pub source_root: Option<String>,
-    pub file: Option<String>,
-    pub debug_id: Option<String>,
-    pub ignore_list: Option<Vec<u32>>,
-}
-
-impl MapInput {
-    pub(crate) fn into_map(self) -> Option<SourceMap> {
-        if !valid_mappings(&self.mappings, self.sources.len(), self.names.len()) {
-            return None;
+pub(crate) fn parse_map(value: Unknown<'_>) -> Result<Option<SourceMap>> {
+    let map = match value.get_type()? {
+        ValueType::Undefined | ValueType::Null => return Ok(None),
+        ValueType::String => SourceMap::from_json(crate::sources::text(value)?),
+        _ if value.is_buffer()? => {
+            SourceMap::from_bytes(unsafe { value.cast::<BufferSlice>()? }.to_vec())
         }
-        let mut map = SourceMap::new(
-            self.mappings.into(),
-            self.sources.into_iter().map(Into::into).collect(),
-            self.sources_content
-                .into_iter()
-                .map(|s| Some(s.into()))
-                .collect(),
-            self.names.into_iter().map(Into::into).collect(),
-        );
-        map.set_source_root(self.source_root.map(Into::into));
-        map.set_file(self.file.map(Into::into));
-        map.set_debug_id(self.debug_id.map(Into::into));
-        map.set_ignore_list(self.ignore_list.map(Cow::Owned));
-        Some(map)
+        ValueType::Object => {
+            let env = napi::Env::from(value.value().env);
+            let json: Object = env.get_global()?.get_named_property("JSON")?;
+            let stringify: Function<Unknown, String> = json.get_named_property("stringify")?;
+            SourceMap::from_json(stringify.apply(json, value)?)
+        }
+        _ => {
+            return Err(invalid(
+                "Expected a source map object, JSON string or Buffer",
+            ));
+        }
     }
+    .map_err(|e| invalid(&e.to_string()))?;
+    if !valid_mappings(map.mappings(), map.sources().len(), map.names().len()) {
+        return Err(invalid("Invalid source map mappings"));
+    }
+    Ok(Some(map))
 }
 
 fn valid_mappings(mappings: &str, sources: usize, names: usize) -> bool {

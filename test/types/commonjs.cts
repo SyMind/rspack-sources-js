@@ -8,8 +8,10 @@ concat.add(new sources.CompatSource(custom));
 // @ts-expect-error ConcatSource requires a bound Source for object children.
 concat.add(custom);
 const cached = new sources.CachedSource(concat);
-const fromFactory: sources.Source = new sources.CachedSource(() => original).original();
-// @ts-expect-error A JS CachedSource factory must return its Source synchronously.
+const cachedOriginal: sources.Source = cached.original();
+// @ts-expect-error CachedSource requires a Source object.
+new sources.CachedSource(() => original);
+// @ts-expect-error Async factories are also unsupported.
 new sources.CachedSource(async () => original);
 const result: sources.SourceAndMap = cached.sourceAndMap({ columns: true });
 const map: sources.RawSourceMap | null = result.map;
@@ -19,4 +21,4 @@ concat.streamChunks;
 const replacement: sources.Replacement = new sources.ReplaceSource.Replacement(0, 0, 'x');
 // @ts-expect-error replacement content must be a string
 replaced.replace(0, 0, 42);
-void [fromFactory, map, chunks, replacement];
+void [cachedOriginal, map, chunks, replacement];

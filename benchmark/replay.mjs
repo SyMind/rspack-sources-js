@@ -50,7 +50,7 @@ export function validateCases(records) {
       actualResult = replay(record, source, { verify: true });
       if (!error && JSON.stringify(actualResult) !== JSON.stringify(referenceResult)) error = 'implementation-output-mismatch';
     } catch (cause) { error = `${cause.name}: ${cause.message}`; }
-    rows.push({ id: record.id, valid: !error, error, referenceResult, actualResult, expected: record.expected, stats: { ...planner.stats }, frequency: record.frequency, ...record.graph.summary });
+    rows.push({ id: record.id, valid: !error, error, referenceResult, actualResult, expected: record.expected, stats: planner.getStats(), frequency: record.frequency, ...record.graph.summary });
   }
   return { webpackSources: require('webpack-sources/package.json').version, rustSources: '0.103.0', node: process.version, rows };
 }

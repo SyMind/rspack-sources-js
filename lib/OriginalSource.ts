@@ -1,44 +1,31 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { isDualStringBufferCachingEnabled } from "./helpers/stringBufferUtils";
 
 export class OriginalSource extends Source {
-  readonly #name: string;
-  #buffer?: Buffer;
 
   constructor(value: string | Buffer<ArrayBufferLike>, name: string) {
     super();
-    this.#name = name;
-    if (Buffer.isBuffer(value)) this.#buffer = value;
     binding.originalNew(this, value, name);
   }
 
   getName(): string {
-    return this.#name;
+    return binding.originalGetName(this);
   }
 
   source(): SourceValue {
-    return binding.originalSource(this, isDualStringBufferCachingEnabled());
+    return binding.originalSource(this);
   }
 
   buffer(): Buffer<ArrayBufferLike> {
-    return this.#getBuffer();
-  }
-
-  #getBuffer(): Buffer {
-    if (this.#buffer !== undefined) return this.#buffer;
-    const cache = isDualStringBufferCachingEnabled();
-    const buffer = binding.originalBuffer(this, cache);
-    if (cache) this.#buffer = buffer;
-    return buffer;
+    return binding.originalBuffer(this);
   }
 
   size(): number {
-    return binding.originalSize(this, this.#buffer?.length);
+    return binding.originalSize(this);
   }
 
   map(options?: MapOptions | undefined): RawSourceMap | null {
@@ -52,11 +39,7 @@ export class OriginalSource extends Source {
   updateHash(hash: HashLike): void {
     hash.update("OriginalSource");
     hash.update(this.buffer());
-    hash.update(this.#name);
-  }
-
-  buffers(): Buffer[] {
-    return [this.#getBuffer()];
+    hash.update(binding.originalGetName(this));
   }
 }
 

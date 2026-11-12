@@ -452,9 +452,8 @@ impl Source for ReplaceSource {
       }
 
       // Handle the replacement itself
-      let original_length = replacement
-        .end
-        .saturating_sub(replacement.start.max(inner_pos)) as usize;
+      let end = (replacement.end as usize).min(inner_source_size);
+      let original_length = end.saturating_sub(replacement.start.max(inner_pos) as usize);
       let replacement_length = replacement.content.len();
 
       // Subtract original content length and add replacement content length

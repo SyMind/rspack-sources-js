@@ -1,9 +1,7 @@
 pub mod diagnostics;
-mod js;
 mod maps;
-mod model;
 mod positions;
-mod source_helpers;
+mod source_binding;
 pub mod sources;
 
 pub(crate) fn invalid(message: &str) -> napi::Error {

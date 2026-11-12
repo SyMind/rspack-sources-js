@@ -16,6 +16,7 @@
 )]
 
 mod cached_source;
+mod compat_source;
 mod concat_source;
 mod decoder;
 mod encoder;
@@ -25,8 +26,10 @@ mod line_index;
 mod linear_map;
 mod mapping_source;
 mod original_source;
+mod prefix_source;
 mod raw_source;
 mod replace_source;
+mod size_only_source;
 mod source;
 mod source_content_lines;
 mod source_map_source;
@@ -41,12 +44,15 @@ pub use threadsafe_weak_ref::ThreadsafeWeakRef;
 pub mod cacheable;
 
 pub use cached_source::{CachedData, CachedSource};
+pub use compat_source::CompatSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
 pub use mapping_source::MappingSource;
 pub use original_source::OriginalSource;
+pub use prefix_source::PrefixSource;
 pub use raw_source::{RawBufferSource, RawStringSource};
 pub use replace_source::{ReplaceSource, Replacement, ReplacementEnforce};
+pub use size_only_source::SizeOnlySource;
 pub use source::{
   MapOptions, Mapping, OriginalLocation, Source, SourceExt, SourceMap, SourceRef, SourceValue,
 };

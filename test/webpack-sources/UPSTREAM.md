@@ -17,11 +17,11 @@
 3. `package-entry.js` 原本比较包入口与私有 Source 模块；本项目未提供这些私有模块，因此改为比较根入口与包的自引用 `require("rspack-sources-js")`，检查 `main` / `exports` 的解析与重复读取身份。
 4. helper 导入及相关 JSDoc 类型路径改为本项目的 `dist/...`。测试直接覆盖 `lib/` TypeScript 编译出的本地实现；helper 单元测试的通过不代表 Rust 内部 helpers 已被直接测试。
 5. `helpers/validate-mappings.js` 通过 `--require` 在测试加载前替换同一 JS mappings writer，保留上游的逐项映射校验。Rust 生成的映射仍由各用例的预期值、原始快照、SourceMapConsumer 和 sourcemap-validator 校验。
-6. 部分 Rust 缓存仍通过 `test/native-internals.cjs` 检查。CachedSource 的 map 和 hash 用例通过原始 Source 的调用次数、构造器传入的 Map 和 `updateHash()` 的输出验证缓存行为。ReplaceSource 的包装对象身份通过公开 `original()` 检查。下文通过记录属于此前版本。
+6. 缓存用例通过公开方法检查返回值、对象身份或重新计算次数。CachedSource 的 map 和 hash 用例通过原始 Source 的调用次数和 `updateHash()` 的输出验证缓存行为。ReplaceSource 的包装对象身份通过公开 `original()` 检查。替换顺序通过 `source()` 和 `getReplacements()` 返回的独立快照验证，排序在 Rust 内完成。下文通过记录属于此前版本。
 
-7. RawSource / OriginalSource 的 `updateHash` 按指定 checkout 调用 `this.buffer()`。对应断言检查 hash 收到的 Buffer、更新顺序及双缓存策略。CachedSource 的 hash 快照单独跟随 b501a3a。首次回放保留字符串与 Buffer 的分段，getCachedData 将字符串就地转为 Buffer，后续导出复用同一数组。构造器仍接受旧的混合记录。[Raw / Original 哈希基线](https://github.com/webpack/webpack-sources/blob/1aa76ca9743cb630e00a0077a18030239126086c/lib/OriginalSource.js#L251) · [CachedSource 的 hash 导出](https://github.com/webpack/webpack-sources/blob/b501a3a172bce3f8424ae99838fdede806407fb2/lib/CachedSource.js#L70)
+7. RawSource / OriginalSource 的 `updateHash` 按指定 checkout 调用 `this.buffer()`。对应断言检查 hash 收到的 Buffer、更新顺序及双缓存策略。CachedSource 在实例内记录和回放 hash 分段。构造器只接受原始 Source。依赖函数工厂、上游缓存快照导出或构造器恢复的用例标为 skip。[Raw / Original 哈希基线](https://github.com/webpack/webpack-sources/blob/1aa76ca9743cb630e00a0077a18030239126086c/lib/OriginalSource.js#L251) · [CachedSource 的 hash 导出](https://github.com/webpack/webpack-sources/blob/b501a3a172bce3f8424ae99838fdede806407fb2/lib/CachedSource.js#L70)
 
-8. 本项目不实现 source map scopes 提案；移除 scopes.js。流式选项只保留 columns 和 finalSource；onSource 只返回索引、名称与内容。下文的全量通过记录为此前版本。
+8. 本项目暂不提供 JS `streamChunks()` 和 source map scopes 提案相关 API。已排除上游直接检查流式回调的用例及 scopes.js。普通 `map()` 和 `sourceAndMap()` 仍参与快照和组合测试。
 
 9. ConcatSource 只接受字符串和已绑定的 Source。上游用例里的自定义子对象显式包装为 CompatSource。
 
@@ -31,7 +31,7 @@
 
 ## 执行与验证
 
-本次同步已核对三个文件的上游增量、四份快照和两个 fixtures 的字节，并通过三个测试文件的 JavaScript 语法检查。按项目约定暂停执行测试。当前包缺少 `util.sourceMap.originalPositionFor()` 和相应的编译后 helper，`sourceMap.js` 会在加载时失败，`package-entry.js` 的新增导出检查也会失败。
+同步时已核对三个文件的上游增量、四份快照和两个 fixtures 的字节，并通过三个测试文件的 JavaScript 语法检查。当次同步只执行了静态检查。当前包缺少 `util.sourceMap.originalPositionFor()` 和相应的编译后 helper，`sourceMap.js` 会在加载时失败，`package-entry.js` 的新增导出检查也会失败。
 
 ```sh
 pnpm build
@@ -56,7 +56,7 @@ pnpm exec node --require ./test/webpack-sources/helpers/validate-mappings.js \
 
 ## 本地 TypeScript 实现
 
-`lib/` 现已直接包含从 v3.6.0 迁入的 Source 类和全部流式 helpers，并保留原有 Rust 快照加速。`tsconfig.json` 启用 `strict`，通过 `tsc` 生成 `dist/` 的 CJS / ESM 入口与声明文件。上游测试、mapping writer 校验均加载这些本地编译产物。
+初次迁移时，`lib/` 包含从 v3.6.0 迁入的 Source 类和流式 helpers，并保留 Rust 快照加速。`tsconfig.json` 启用 `strict`，通过 `tsc` 生成 `dist/` 的 CJS / ESM 入口与声明文件。上游测试、mapping writer 校验均加载这些本地编译产物。
 
 包已移除原来的参考实现别名及所有 npm 运行时依赖；开发依赖 `webpack-sources@3.6.0` 仅供 `test/sources.test.cjs` 的独立差分对照和 `probe:reference` 使用。原先比较本包与参考包的 `Replacement` 构造器身份断言，改为比较本包与本地模块，避免将两个独立实现错误要求为同一函数对象。上游用例、snapshots 和 fixtures 均未删减或重写。
 

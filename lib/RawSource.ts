@@ -1,17 +1,16 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { contextOf } from './nativeContext';
 import { internString } from './helpers/stringBufferUtils';
 
 export class RawSource extends Source {
   constructor(value: string | Buffer, convertToString = false) {
     super();
     if (typeof value === 'string') value = internString(value);
-    binding.rawNew(this, contextOf(this), value, convertToString);
+    binding.rawNew(this, value, convertToString);
   }
 
   isBuffer(): boolean {
@@ -30,12 +29,19 @@ export class RawSource extends Source {
     return binding.rawSize(this);
   }
 
+  map(options?: MapOptions): RawSourceMap | null {
+    return binding.rawMap(this, options?.columns !== false);
+  }
+
+  sourceAndMap(options?: MapOptions): Source.SourceAndMap {
+    return binding.rawSourceAndMap(this, options?.columns !== false);
+  }
+
   updateHash(hash: HashLike): void {
     hash.update("RawSource");
     hash.update(this.buffer());
   }
 }
-
 
 export declare namespace RawSource {
   export { HashLike, MapOptions, RawSourceMap, SourceValue, };

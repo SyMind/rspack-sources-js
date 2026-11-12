@@ -1,52 +1,69 @@
-pub(crate) struct Edit {
-    /// UTF-16 boundaries; end is exclusive. Conversion happens once per batch.
-    pub start: u32,
-    pub end: u32,
-    pub content: String,
-    pub name: Option<String>,
+// JS records UTF-16 offsets, while ReplaceSource takes UTF-8 byte offsets.
+// ASCII needs no offset table. Keep the cumulative offsets after each wide char.
+pub(crate) struct ByteOffsets {
+    wide: Vec<WideChar>,
 }
 
-pub(crate) fn byte_offsets(text: &str, edits: &[Edit]) -> Option<Vec<(u32, u32)>> {
-    if text.len() > u32::MAX as usize {
-        return None;
+struct WideChar {
+    end_utf16: u32,
+    end_byte: u32,
+    surrogate_pair: bool,
+}
+
+impl ByteOffsets {
+    pub(crate) fn new(source: &rspack_sources::SourceRef) -> Option<Self> {
+        let mut wide = Vec::new();
+        let mut bytes = 0usize;
+        let mut units = 0u32;
+        source.rope(&mut |text| {
+            let start = bytes;
+            bytes += text.len();
+            if bytes > u32::MAX as usize {
+                return;
+            }
+            if text.is_ascii() {
+                units += text.len() as u32;
+                return;
+            }
+            for (offset, ch) in text.char_indices() {
+                units += ch.len_utf16() as u32;
+                if !ch.is_ascii() {
+                    wide.push(WideChar {
+                        end_utf16: units,
+                        end_byte: (start + offset + ch.len_utf8()) as u32,
+                        surrogate_pair: ch.len_utf16() == 2,
+                    });
+                }
+            }
+        });
+        (bytes <= u32::MAX as usize).then_some(Self { wide })
     }
-    let mut boundaries = Vec::with_capacity(edits.len() * 2);
-    for edit in edits {
-        if edit.start > edit.end {
+
+    /// Map a known UTF-8 character boundary in a core replacement back to JS.
+    pub(crate) fn utf16_at(&self, byte: u32) -> u32 {
+        let i = self.wide.partition_point(|ch| ch.end_byte <= byte);
+        let extra = self.wide[..i]
+            .last()
+            .map_or(0, |ch| ch.end_byte - ch.end_utf16);
+        byte - extra
+    }
+
+    pub(crate) fn byte_at(&self, pos: f64) -> Option<u32> {
+        if pos.fract() != 0. || pos < 0. || pos > u32::MAX as f64 {
             return None;
         }
-        boundaries.push(edit.start);
-        boundaries.push(edit.end);
-    }
-    boundaries.sort_unstable();
-    boundaries.dedup();
-    let mut offsets = Vec::with_capacity(boundaries.len());
-    let mut wanted = boundaries.iter().copied().peekable();
-    let mut column = 0_u32;
-    for (byte, ch) in text.char_indices() {
-        if wanted.peek() == Some(&column) {
-            offsets.push(byte as u32);
-            wanted.next();
-        }
-        column = column.checked_add(ch.len_utf16() as u32)?;
-        if wanted.peek().is_some_and(|next| *next < column) {
+        let pos = pos as u32;
+        let i = self.wide.partition_point(|ch| ch.end_utf16 <= pos);
+        if self
+            .wide
+            .get(i)
+            .is_some_and(|ch| ch.surrogate_pair && ch.end_utf16 - pos == 1)
+        {
             return None;
         }
+        let extra = self.wide[..i]
+            .last()
+            .map_or(0, |ch| ch.end_byte - ch.end_utf16);
+        pos.checked_add(extra)
     }
-    if wanted.peek() == Some(&column) {
-        offsets.push(text.len() as u32);
-        wanted.next();
-    }
-    if wanted.next().is_some() {
-        return None;
-    }
-    edits
-        .iter()
-        .map(|edit| {
-            Some((
-                offsets[boundaries.binary_search(&edit.start).ok()?],
-                offsets[boundaries.binary_search(&edit.end).ok()?],
-            ))
-        })
-        .collect()
 }

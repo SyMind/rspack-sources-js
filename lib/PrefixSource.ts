@@ -1,50 +1,18 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { prefixSourceAndMap } from './helpers/sourceMapTransforms';
-import { contextOf } from './nativeContext';
-
-// `/\n/g` (no lookahead) lets V8's regex compiler take its
-// literal-character fast path; the previous `/\n(?=.|\s)/g` form
-// disabled it. Output stays identical because `buildPrefixed` strips
-// the spurious trailing prefix when the input ended with a newline.
-const NEWLINE_REGEX = /\n/g;
-
-/**
- * Prepend `prefix` and insert `prefix` after every newline that has
- * content following — the original `/\n(?=.|\s)/g` semantics, but
- * implemented as a fast-path regex + tail-strip.
- */
-const buildPrefixed = (prefix: string, node: string): string => {
-  if (prefix.length === 0)
-    return node;
-  const replaced = node.replace(NEWLINE_REGEX, `\n${prefix}`);
-  const len = node.length;
-  // `/\n/g` matches the trailing newline too, so the replace appended
-  // a spurious prefix at the end. Trim it.
-  if (len > 0 && node.charCodeAt(len - 1) === 10) {
-    return prefix + replaced.slice(0, replaced.length - prefix.length);
-  }
-  return prefix + replaced;
-};
+import { RawSource } from './RawSource';
 
 export class PrefixSource extends Source {
-  get #prefix(): string {
-    return binding.prefixGetPrefix(this);
-  }
-
-  get #source(): Source {
-    return binding.prefixOriginal(this);
-  }
+  readonly #source: Source;
 
   constructor(prefix: string, source: string | Buffer<ArrayBufferLike> | Source) {
     super();
-    const native = contextOf(this);
-
-    binding.prefixNew(this, native, prefix, source);
+    this.#source = typeof source === "string" || Buffer.isBuffer(source) ? new RawSource(source, true) : source;
+    binding.prefixNew(this, prefix, this.#source);
   }
 
   getPrefix(): string {
@@ -52,43 +20,33 @@ export class PrefixSource extends Source {
   }
 
   original(): Source {
-    return binding.prefixOriginal(this);
+    return this.#source;
   }
 
   source(): SourceValue {
-    const value = binding.prefixSource(this);
-    if (value !== undefined) return value;
-    return buildPrefixed(this.#prefix, (this.#source.source() as string));
+    return binding.prefixSource(this);
   }
 
   map(options?: MapOptions | undefined): RawSourceMap | null {
-    const map = binding.prefixMap(this, options);
-    return map === undefined ? prefixSourceAndMap(this.#source, this.#prefix, options).map : map;
+    return binding.prefixMap(this, options?.columns !== false);
   }
 
   sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
-    const result = binding.prefixSourceAndMap(this, options);
-    if (result !== undefined) return result;
-    const { text, map } = prefixSourceAndMap(this.#source, this.#prefix, options);
-    return { source: buildPrefixed(this.#prefix, text), map };
+    return binding.prefixSourceAndMap(this, options?.columns !== false);
   }
 
   updateHash(hash: HashLike): void {
     hash.update("PrefixSource");
     this.#source.updateHash(hash);
-    hash.update(this.#prefix);
+    hash.update(binding.prefixGetPrefix(this));
   }
 
   buffer(): Buffer {
-    return binding.prefixBuffer(this) ?? super.buffer();
-  }
-
-  buffers(): Buffer[] {
-    return binding.prefixBuffers(this) ?? [super.buffer()];
+    return binding.prefixBuffer(this);
   }
 
   size(): number {
-    return binding.prefixSize(this) ?? super.buffer().length;
+    return binding.prefixSize(this);
   }
 }
 

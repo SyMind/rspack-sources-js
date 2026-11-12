@@ -11,7 +11,7 @@ use crate::{
   MapOptions, RawBufferSource, Source, SourceExt, SourceMap, SourceRef,
   helpers::{
     Chunks, GeneratedInfo, StreamChunks, TextSpan, stream_and_get_source_and_map,
-    stream_chunks_of_raw_rope, stream_chunks_of_source_map,
+    stream_chunks_of_source_map,
   },
   source::SourceValue,
 };
@@ -45,16 +45,6 @@ impl CachedData {
       &self.columns_map
     } else {
       &self.line_only_map
-    }
-  }
-
-  /// Only transfer owned cache entries when changing the backing source.
-  pub fn without_source(&self) -> Self {
-    Self {
-      size: self.size.clone(),
-      columns_map: self.columns_map.clone(),
-      line_only_map: self.line_only_map.clone(),
-      ..Self::default()
     }
   }
 }
@@ -101,11 +91,9 @@ impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
   pub fn new<T: SourceExt>(inner: T) -> Self {
     let source_ref = inner.boxed();
-    // Check if it's already a SourceRef containing a CachedSource
     if let Some(cached_source) = source_ref.as_ref().as_any().downcast_ref::<CachedSource>() {
       return cached_source.clone();
     }
-
     Self {
       inner: source_ref,
       cache: Arc::new(CachedData::default()),
@@ -123,14 +111,6 @@ impl CachedSource {
   /// ```
   pub async fn new_async<T: SourceExt, F: Future<Output = T>>(factory: impl FnOnce() -> F) -> Self {
     Self::new(factory().await)
-  }
-
-  /// Attach independently owned cache entries to a source.
-  pub fn with_cached_data(inner: SourceRef, data: CachedData) -> Self {
-    Self {
-      inner,
-      cache: Arc::new(data),
-    }
   }
 
   pub fn cached_data(&self) -> &CachedData {
@@ -288,10 +268,21 @@ impl<'source> Chunks<'source> for CachedSourceChunks<'source> {
     };
     match cell.get() {
       Some(Some(map)) => {
+        // Line-only mapping segments omit name indices, but replacements may
+        // still have registered names on the first traversal.
+        if !options.columns {
+          for (index, name) in map.names().iter().enumerate() {
+            on_name(index as u32, name);
+          }
+        }
         let source = self.get_or_init_source();
         stream_chunks_of_source_map(options, source, map, on_chunk, on_source, on_name)
       }
-      Some(None) => stream_chunks_of_raw_rope(self.cache_source.inner.as_ref(), options, on_chunk),
+      // A null public map can still contribute originals to a containing map,
+      // for example when a replacement deleted their entire generated text.
+      Some(None) => self
+        .get_or_init_chunks()
+        .stream(options, on_chunk, on_source, on_name),
       None => {
         let (generated_info, map) = stream_and_get_source_and_map(
           options,

@@ -1,10 +1,9 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { contextOf } from './nativeContext';
 
 function unavailable(): never {
   throw new Error("Content and Map of this Source is not available (only size() is supported)");
@@ -13,7 +12,7 @@ function unavailable(): never {
 export class SizeOnlySource extends Source {
   constructor(size: number) {
     super();
-    binding.sizeOnlyNew(this, contextOf(this), size);
+    binding.sizeOnlyNew(this, size);
   }
 
   size(): number {

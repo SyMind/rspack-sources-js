@@ -139,12 +139,6 @@ impl ConcatSource {
       .extend(sources);
   }
 
-  /// Install children whose boundaries have already been determined by the caller.
-  pub fn set_optimized_children(&mut self, children: Vec<SourceRef>) {
-    self.children = Mutex::default();
-    self.is_optimized = OnceLock::from(children);
-  }
-
   /// Add a [Source] to concat.
   pub fn add<S: Source + 'static>(&mut self, source: S) {
     // `&mut self` guarantees exclusive access, so the Mutex doesn't need to be
@@ -339,55 +333,28 @@ impl<'source> Chunks<'source> for ConcatSourceChunks<'source> {
             .as_ref()
             .and_then(|original| original.name_index)
             .and_then(|name_index| name_index_mapping.borrow().get(&name_index).copied());
-          last_mapping_line = if result_source_index.is_none() {
-            0
-          } else {
+          let original =
+            mapping
+              .original
+              .zip(result_source_index)
+              .map(|(original, source_index)| OriginalLocation {
+                source_index,
+                name_index: result_name_index,
+                ..original
+              });
+          last_mapping_line = if original.is_some() {
             mapping.generated_line
-          };
-          if options.final_source {
-            if let (Some(result_source_index), Some(original)) =
-              (result_source_index, &mapping.original)
-            {
-              on_chunk(
-                None,
-                Mapping {
-                  generated_line: line,
-                  generated_column: column,
-                  original: Some(OriginalLocation {
-                    source_index: result_source_index,
-                    original_line: original.original_line,
-                    original_column: original.original_column,
-                    name_index: result_name_index,
-                  }),
-                },
-              );
-            }
-          } else if let (Some(result_source_index), Some(original)) =
-            (result_source_index, &mapping.original)
-          {
-            on_chunk(
-              chunk,
-              Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: Some(OriginalLocation {
-                  source_index: result_source_index,
-                  original_line: original.original_line,
-                  original_column: original.original_column,
-                  name_index: result_name_index,
-                }),
-              },
-            );
           } else {
-            on_chunk(
-              chunk,
-              Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: None,
-              },
-            );
-          }
+            0
+          };
+          on_chunk(
+            if options.final_source { None } else { chunk },
+            Mapping {
+              generated_line: line,
+              generated_column: column,
+              original,
+            },
+          );
         },
         &mut |i, source, source_content| {
           let mut global_index = source_mapping.get(source).copied();
@@ -448,7 +415,7 @@ impl StreamChunks for ConcatSource {
 }
 
 fn can_merge_raw(child: &SourceRef) -> bool {
-  // The binding controls when literal wrappers may merge. Other JS wrappers have observable identity.
+  // Preserve child wrappers returned by JS getChildren(); bare literals may merge.
   #[cfg(feature = "binding")]
   if child.jsobject().is_some() {
     return false;

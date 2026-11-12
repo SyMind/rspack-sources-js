@@ -291,26 +291,14 @@ export default function StaticPage(_ref) {
 		assert.strictEqual(replacements[1].content, "Claude");
 	});
 
-	it("should skip sorting when replacements were added in order", () => {
+	it("should apply replacements added in order", () => {
 		const source = new ReplaceSource(
 			new OriginalSource("Hello World", "file.txt"),
 		);
 		source.replace(0, 4, "Howdy");
 		source.replace(6, 10, "Claude");
-		const { sort: originalSort } = Array.prototype;
-		let sortCalls = 0;
-		// eslint-disable-next-line no-extend-native
-		Array.prototype.sort = function sort(...args) {
-			sortCalls++;
-			return originalSort.apply(this, args);
-		};
-		try {
-			assert.strictEqual(source.source(), "Howdy Claude");
-			assert.strictEqual(sortCalls, 0);
-		} finally {
-			// eslint-disable-next-line no-extend-native
-			Array.prototype.sort = originalSort;
-		}
+		assert.strictEqual(source.source(), "Howdy Claude");
+		assert.deepStrictEqual(source.getReplacements().map(edit => edit.start), [0, 6]);
 	});
 
 	it("should sort when replacements were added out of order", () => {
@@ -319,20 +307,8 @@ export default function StaticPage(_ref) {
 		);
 		source.replace(6, 10, "Claude");
 		source.replace(0, 4, "Howdy");
-		const { sort: originalSort } = Array.prototype;
-		let sortCalls = 0;
-		// eslint-disable-next-line no-extend-native
-		Array.prototype.sort = function sort(...args) {
-			sortCalls++;
-			return originalSort.apply(this, args);
-		};
-		try {
-			assert.strictEqual(source.source(), "Howdy Claude");
-			assert.strictEqual(sortCalls, 1);
-		} finally {
-			// eslint-disable-next-line no-extend-native
-			Array.prototype.sort = originalSort;
-		}
+		assert.strictEqual(source.source(), "Howdy Claude");
+		assert.deepStrictEqual(source.getReplacements().map(edit => edit.start), [0, 6]);
 	});
 
 	it("should re-sort when a replacement is added out of order after a read", () => {

@@ -38,6 +38,12 @@ impl SourceRef {
     self.jsobject.as_deref()
   }
 
+  /// Borrow the underlying source for an edit while this handle is its sole owner.
+  #[cfg(feature = "binding")]
+  pub fn get_mut(&mut self) -> Option<&mut (dyn Source + 'static)> {
+    Arc::get_mut(&mut self.inner)
+  }
+
   pub fn ptr_eq(&self, other: &Self) -> bool {
     Arc::ptr_eq(&self.inner, &other.inner)
   }
@@ -267,10 +273,22 @@ impl Hash for dyn Source {
 }
 
 pub trait AsAny {
+  #[cfg(feature = "binding")]
+  fn type_name(&self) -> &'static str;
   fn as_any(&self) -> &dyn Any;
+  #[cfg(feature = "binding")]
+  fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl<T: Any> AsAny for T {
+  #[cfg(feature = "binding")]
+  fn type_name(&self) -> &'static str {
+    std::any::type_name::<T>()
+  }
+  #[cfg(feature = "binding")]
+  fn as_any_mut(&mut self) -> &mut dyn Any {
+    self
+  }
   fn as_any(&self) -> &dyn Any {
     self
   }

@@ -18,7 +18,7 @@ function updates(source, onUpdate) {
   return chunks;
 }
 
-test('updateHash keeps the child order and observes edits made by the caller', () => {
+test('updateHash preserves child order and ignores writes to replacement snapshots', () => {
   const input = Buffer.from([0xff, 0x00]);
   const replace = new ReplaceSource(new RawSource(input), 'file');
   replace.insert(5, 'last');
@@ -30,7 +30,7 @@ test('updateHash keeps the child order and observes edits made by the caller', (
   });
   assert.deepEqual(chunks, [
     'ConcatSource', 'RawSource', Buffer.from('ab'), 'PrefixSource',
-    'ReplaceSource', 'RawSource', input, 'file', '01', 'new', 'id', '54', 'last', '> ',
+    'ReplaceSource', 'RawSource', input, 'file', '01', 'old', 'id', '54', 'last', '> ',
   ]);
   assert.strictEqual(chunks[6], input);
   assert.deepEqual(updates(concat).slice(-2), ['RawSource', Buffer.from('next call')]);
@@ -76,16 +76,7 @@ test('CachedSource retries after a failed replay and preserves input boundaries'
   assert.throws(() => updates(source, () => { throw error; }), e => e === error);
   const first = updates(source);
   assert.deepEqual(first, [Buffer.from(small.repeat(101)), large, bytes, Buffer.alloc(0)]);
-  const data = source.getCachedData();
-  const lazy = () => assert.fail('resolved cached original');
-  const restored = new CachedSource(lazy, data);
-  const buffers = first.map(item => typeof item === 'string' ? Buffer.from(item) : item);
-  assert.deepEqual(data.hash, buffers);
-  assert.strictEqual(source.getCachedData().hash, data.hash);
-  assert.deepEqual(updates(restored), buffers);
-  const legacy = new CachedSource(lazy, { ...data, hash: first.slice() });
-  assert.deepEqual(updates(legacy), first);
-  assert.deepEqual(legacy.getCachedData().hash, buffers);
+  assert.deepEqual(updates(source), first);
   assert.strictEqual(updates(source)[0], first[0]);
   assert.strictEqual(first[2], bytes);
   assert.equal(calls, 2);

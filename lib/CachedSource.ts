@@ -1,31 +1,27 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { readMap } from './helpers/cachedSourceMaps';
+
+type HashUpdates = (string | Buffer)[];
 
 export class CachedSource extends Source {
-  #original: Original;
-  #maps: BufferedMaps | undefined;
-  #hash: CachedData['hash'];
+  readonly #original: Source;
+  #hash?: HashUpdates;
 
-  constructor(source: Original, cachedData?: CachedData) {
+  constructor(source: Source) {
     super();
-    const { source: type, buffer, size, maps, hash } = cachedData ?? {};
     this.#original = source;
-    this.#maps = maps;
-    this.#hash = hash;
-    binding.cachedNew(this, type, buffer, size);
+    binding.cachedNew(this, source);
   }
 
-  originalLazy(): Original {
+  originalLazy(): Source {
     return this.#original;
   }
 
   original(): Source {
-    if (typeof this.#original === "function") this.#original = this.#original();
     return this.#original;
   }
 
@@ -37,25 +33,16 @@ export class CachedSource extends Source {
     return binding.cachedBuffer(this);
   }
 
-  buffers(): Buffer<ArrayBufferLike>[] {
-    return binding.cachedBuffers(this);
-  }
-
   size(): number {
     return binding.cachedSize(this);
   }
 
   sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
-    return binding.cachedSourceAndMap(this, options);
+    return binding.cachedSourceAndMap(this, options?.columns !== false);
   }
 
   map(options?: MapOptions | undefined): RawSourceMap | null {
-    const key = JSON.stringify(options ?? {});
-    const entry = this.#maps?.get(key);
-    if (entry !== undefined) return readMap(entry);
-    const map = this.original().map(options);
-    (this.#maps ??= new Map()).set(key, { map, bufferedMap: undefined });
-    return map;
+    return binding.cachedMap(this, options?.columns !== false);
   }
 
   updateHash(hash: HashLike): void {
@@ -64,7 +51,7 @@ export class CachedSource extends Source {
       for (const item of cached) hash.update(item);
       return;
     }
-    const updates: (string | Buffer)[] = [];
+    const updates: HashUpdates = [];
     let currentString: string | undefined;
     const tracker = {
       update(item: string | Buffer): void {
@@ -93,68 +80,10 @@ export class CachedSource extends Source {
 }
 
 export declare namespace CachedSource {
-  export { HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, BufferedMap, BufferEntry, BufferedMaps, CachedData, };
+  export { HashLike, MapOptions, RawSourceMap, SourceAndMap, SourceValue, };
 }
-type Original = Source | (() => Source);
 type HashLike = import("./Source").HashLike;
 type MapOptions = import("./Source").MapOptions;
 type RawSourceMap = import("./Source").RawSourceMap;
 type SourceAndMap = import("./Source").SourceAndMap;
 type SourceValue = import("./Source").SourceValue;
-type BufferedMap = {
-  /**
-   * version
-   */
-  version: number;
-  /**
-   * sources
-   */
-  sources: string[];
-  /**
-   * name
-   */
-  names: string[];
-  /**
-   * source root
-   */
-  sourceRoot?: string | undefined;
-  /**
-   * sources content
-   */
-  sourcesContent?: (Buffer | "")[] | undefined;
-  /**
-   * mappings
-   */
-  mappings?: Buffer | undefined;
-  /**
-   * file
-   */
-  file: string;
-};
-type BufferEntry = {
-  map?: null | RawSourceMap;
-  bufferedMap?: null | BufferedMap;
-};
-type BufferedMaps = Map<string, BufferEntry>;
-export type CachedData = {
-  /**
-   * source
-   */
-  source?: boolean | undefined;
-  /**
-   * buffer
-   */
-  buffer: Buffer;
-  /**
-   * size
-   */
-  size?: number | undefined;
-  /**
-   * maps
-   */
-  maps: BufferedMaps;
-  /**
-   * hash
-   */
-  hash?: (string | Buffer)[] | undefined;
-};

@@ -1,6 +1,6 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 export class Source {
   source(): SourceValue {
@@ -74,7 +74,7 @@ export type RawSourceMap = {
   /**
    * sources content
    */
-  sourcesContent?: string[] | undefined;
+  sourcesContent?: (string | null)[] | undefined;
   /**
    * mappings
    */
@@ -82,7 +82,7 @@ export type RawSourceMap = {
   /**
    * file
    */
-  file: string;
+  file?: string | undefined;
   /**
    * debug id
    */

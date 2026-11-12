@@ -1,33 +1,41 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
+import { RawSource } from './RawSource';
 import binding = require('./binding');
-import { concatSourceAndMap } from './helpers/sourceMapTransforms';
-import { sharedHelpers } from './nativeContext';
 
 export class ConcatSource extends Source {
+  // Rust holds the SourceRefs; keep their JS wrappers reachable for getChildren().
+  readonly #roots: Source[];
+
   constructor(...args: Child[]) {
     super();
     binding.concatNew(this, args);
+    this.#roots = args.filter(item => typeof item !== "string");
   }
 
   /** Return a shallow snapshot of the current children. */
   getChildren(): Source[] {
-    return binding.concatGetChildren(this);
+    return binding.concatGetChildren(this).map(child => typeof child === "string" ? new RawSource(child) : child);
   }
 
   add(item: Child): void {
     binding.concatAdd(this, item);
+    if (typeof item !== "string") this.#roots.push(item);
   }
 
   addAllSkipOptimizing(items: Child[]): void {
-    binding.concatAddAllSkipOptimizing(this, items);
+    const inputs = Array.from(items);
+    binding.concatAddAllSkipOptimizing(this, inputs);
+    for (const item of inputs) {
+      if (typeof item !== "string") this.#roots.push(item);
+    }
   }
 
   buffer(): Buffer<ArrayBufferLike> {
-    return binding.concatBuffer(this) ?? Buffer.concat(this.buffers());
+    return binding.concatBuffer(this);
   }
 
   buffers(): Buffer<ArrayBufferLike>[] {
@@ -35,37 +43,19 @@ export class ConcatSource extends Source {
   }
 
   source(): SourceValue {
-    const value = binding.concatSource(this);
-    if (value !== undefined) return value;
-    const children = this.getChildren();
-    const childCount = children.length;
-    let source = "";
-    for (let ci = 0; ci < childCount; ci++) {
-      source += children[ci].source();
-    }
-    return source;
+    return binding.concatSource(this);
   }
 
   size(): number {
-    const value = binding.concatSize(this);
-    if (value != null) return value;
-    const children = this.getChildren();
-    const childCount = children.length;
-    let size = 0;
-    for (let ci = 0; ci < childCount; ci++) {
-      size += children[ci].size();
-    }
-    return size;
+    return binding.concatSize(this);
   }
 
   map(options?: MapOptions | undefined): RawSourceMap | null {
-    const map = binding.concatMap(this, sharedHelpers.columns(options));
-    return map === undefined ? concatSourceAndMap(this.getChildren(), options).map : map;
+    return binding.concatMap(this, options?.columns !== false);
   }
 
   sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
-    const result = binding.concatSourceAndMap(this, sharedHelpers.columns(options));
-    return result === undefined ? concatSourceAndMap(this.getChildren(), options) : result;
+    return binding.concatSourceAndMap(this, options?.columns !== false);
   }
 
   updateHash(hash: HashLike): void {

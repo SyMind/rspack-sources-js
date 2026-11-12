@@ -1,136 +1,75 @@
-use crate::{
-    js::{Js, check},
-    model::{Field, Kind, SourceNode, argument, into_js, object, require},
-};
+use crate::source_binding::{NativeBinding, attach, source_of};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
-use rspack_sources::{RawStringSource, SourceExt, SourceRef};
-use std::rc::Rc;
+use rspack_sources::{RawBufferSource, SourceRef};
 
-pub(crate) fn new_node(
-    receiver: Js,
-    store: Js,
-    value: Js,
-    convert: bool,
-) -> Result<Rc<SourceNode>> {
-    let n = SourceNode::allocate(receiver, store, Kind::Raw)?;
-    let buffer = value.is_buffer()?;
-    if !buffer && value.ty()? != napi::sys::ValueType::napi_string {
-        let message = Js::string(
-            receiver.env,
-            "argument 'value' must be either string or Buffer",
-        )?;
-        let error = Js::make(receiver.env, |p| unsafe {
-            napi::sys::napi_create_type_error(receiver.env, std::ptr::null_mut(), message.raw, p)
-        })?;
-        check(unsafe { napi::sys::napi_throw(receiver.env, error.raw) })?;
-        return Err(napi::Error::new(
-            napi::Status::PendingException,
-            "Invalid raw value",
-        ));
+pub(crate) struct RawSourceBinding {
+    inner: SourceRef,
+}
+
+impl NativeBinding for RawSourceBinding {
+    fn source(&self) -> SourceRef {
+        self.inner.clone()
     }
-    let undefined = Js::undefined(receiver.env)?;
-    n.put("_value", if buffer && convert { undefined } else { value })?;
-    n.put("_valueAsBuffer", if buffer { value } else { undefined })?;
-    n.put_field("_valueIsBuffer", Field::Bool(buffer && !convert));
-    n.put("_valueAsString", if buffer { undefined } else { value })?;
-    n.finish()?;
-    Ok(n)
 }
 
 #[napi]
-pub fn raw_new(
-    receiver: Object<'_>,
-    store: Object<'_>,
-    value: Unknown<'_>,
-    convert_to_string: bool,
-) -> Result<()> {
-    let receiver = object(&receiver);
-    new_node(
-        receiver,
-        object(&store),
-        argument(receiver.env, &value),
-        convert_to_string,
-    )?;
-    Ok(())
-}
-
-pub(crate) fn initial(n: &Rc<SourceNode>) -> Result<Option<SourceRef>> {
-    Ok(n.string("_value").map(|s| RawStringSource::from(s).boxed()))
-}
-
-pub(crate) fn validate(n: &Rc<SourceNode>) -> Result<bool> {
-    Ok(n.field("_valueAsBuffer") == Field::Undefined && n.well_formed("_value"))
-}
-
-pub(crate) fn compile(n: &Rc<SourceNode>, _: Vec<SourceRef>) -> Result<Option<SourceRef>> {
-    initial(n)
-}
-
-fn is_buffer(n: &Rc<SourceNode>) -> Result<Js> {
-    n.get("_valueIsBuffer")
-}
-
-pub(crate) fn source(n: &Rc<SourceNode>) -> Result<Js> {
-    super::leaf_source(n, "_value")
-}
-
-pub(crate) fn buffer(n: &Rc<SourceNode>) -> Result<Js> {
-    super::leaf_buffer(n, "_value")
-}
-
-pub(crate) fn size(n: &Rc<SourceNode>) -> Result<Js> {
-    super::leaf_size(n, "_valueAsString")
+pub fn raw_new(receiver: Object<'_>, value: Unknown<'_>, convert_to_string: bool) -> Result<()> {
+    let source = super::raw_input(value, convert_to_string)?;
+    attach(receiver, source, |inner| RawSourceBinding { inner })
 }
 
 #[napi]
-pub fn raw_is_buffer<'env>(receiver: Object<'env>) -> Result<Unknown<'env>> {
-    let n = require(object(&receiver), Kind::Raw)?;
-    into_js(is_buffer(&n)?)
+pub fn raw_is_buffer(receiver: Object<'_>) -> Result<bool> {
+    Ok(source_of::<RawSourceBinding>(receiver)?
+        .as_ref()
+        .as_any()
+        .is::<RawBufferSource>())
 }
 
 #[napi]
-pub fn raw_source<'env>(receiver: Object<'env>) -> Result<Unknown<'env>> {
-    let n = require(object(&receiver), Kind::Raw)?;
-    into_js(source(&n)?)
+pub fn raw_source(receiver: Object<'_>) -> Result<Either<String, Buffer>> {
+    Ok(super::js_source(
+        source_of::<RawSourceBinding>(receiver)?.source(),
+    ))
 }
 
 #[napi]
-pub fn raw_buffer<'env>(receiver: Object<'env>) -> Result<Unknown<'env>> {
-    let n = require(object(&receiver), Kind::Raw)?;
-    into_js(buffer(&n)?)
+pub fn raw_buffer(receiver: Object<'_>) -> Result<Buffer> {
+    Ok(source_of::<RawSourceBinding>(receiver)?
+        .buffer()
+        .into_owned()
+        .into())
 }
 
 #[napi]
-pub fn raw_size<'env>(receiver: Object<'env>) -> Result<Unknown<'env>> {
-    let n = require(object(&receiver), Kind::Raw)?;
-    into_js(size(&n)?)
+pub fn raw_size(receiver: Object<'_>) -> Result<f64> {
+    Ok(source_of::<RawSourceBinding>(receiver)?.size() as f64)
 }
 
 #[napi]
-pub fn raw_text<'env>(receiver: Object<'env>) -> Result<Unknown<'env>> {
-    let n = require(object(&receiver), Kind::Raw)?;
-    into_js(super::leaf_source(&n, "_valueAsString")?)
+pub fn raw_map(receiver: Object<'_>, columns: bool) -> Result<serde_json::Value> {
+    super::source_map(source_of::<RawSourceBinding>(receiver)?.as_ref(), columns)
 }
 
-// Historical benchmark control only. The production API never transports kind
-// strings or argument arrays. Enabling this feature reproduces that old ABI.
+#[napi]
+pub fn raw_source_and_map(receiver: Object<'_>, columns: bool) -> Result<super::SourceAndMap> {
+    super::source_and_map(source_of::<RawSourceBinding>(receiver)?.as_ref(), columns)
+}
+
 #[cfg(feature = "benchmark-legacy-api")]
 #[napi]
 pub fn raw_benchmark_generic_new(
     receiver: Object<'_>,
-    store: Object<'_>,
     kind: String,
     args: Vec<Unknown<'_>>,
 ) -> Result<Vec<String>> {
+    let [value, convert] = args.as_slice() else {
+        return Err(crate::invalid("Expected value and convertToString"));
+    };
     if kind != "raw" {
         return Err(crate::invalid("Unsupported benchmark kind"));
     }
-    let receiver = object(&receiver);
-    let undefined = Js::undefined(receiver.env)?;
-    let args: Vec<_> = args.iter().map(|v| argument(receiver.env, v)).collect();
-    let value = args.first().copied().unwrap_or(undefined);
-    let convert = args.get(1).copied().unwrap_or(undefined).truthy()?;
-    new_node(receiver, object(&store), value, convert)?;
+    raw_new(receiver, *value, convert.coerce_to_bool()?)?;
     Ok(Vec::new())
 }

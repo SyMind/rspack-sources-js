@@ -1,7 +1,5 @@
 "use strict";
 
-const { read: readInternal } = require("../native-internals.cjs");
-
 const assert = require("assert");
 const crypto = require("crypto");
 const { afterEach, beforeEach, describe, it } = require("node:test");
@@ -74,7 +72,7 @@ describe("rawSource", () => {
 			},
 		});
 		assert.deepStrictEqual(updates, ["RawSource", Buffer.from(CODE_STRING)]);
-		assert.strictEqual(readInternal(source, "_valueAsBuffer"), updates[1]);
+		assert.strictEqual(source.buffer(), updates[1]);
 	});
 
 	for (const text of [

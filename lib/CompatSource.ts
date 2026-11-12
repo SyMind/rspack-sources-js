@@ -1,12 +1,13 @@
 /*
-    MIT License http://www.opensource.org/licenses/mit-license.php
-    Author Tobias Koppers @sokra
+  MIT License http://www.opensource.org/licenses/mit-license.php
+  Author Tobias Koppers @sokra
 */
 import { Source } from './Source';
 import binding = require('./binding');
-import { contextOf } from './nativeContext';
 
 export class CompatSource extends Source {
+  readonly #sourceLike: SourceLike;
+
   static from(sourceLike: SourceLike): Source {
     return sourceLike instanceof Source
       ? sourceLike
@@ -15,9 +16,8 @@ export class CompatSource extends Source {
 
   constructor(sourceLike: SourceLike) {
     super();
-    const native = contextOf(this);
-
-    binding.compatNew(this, native, sourceLike);
+    this.#sourceLike = sourceLike;
+    binding.compatNew(this, sourceLike);
   }
 
   source(): SourceValue {
@@ -28,24 +28,20 @@ export class CompatSource extends Source {
     return binding.compatBuffer(this);
   }
 
-  buffers(): Buffer<ArrayBufferLike>[] {
-    return binding.compatBuffers(this);
-  }
-
   size(): number {
     return binding.compatSize(this);
   }
 
   map(options?: MapOptions | undefined): RawSourceMap | null {
-    return binding.compatMap(this, options);
+    return binding.compatMap(this, options?.columns !== false);
   }
 
   sourceAndMap(options?: MapOptions | undefined): SourceAndMap {
-    return binding.compatSourceAndMap(this, options);
+    return binding.compatSourceAndMap(this, options?.columns !== false);
   }
 
   updateHash(hash: HashLike): void {
-    const source: SourceLike = binding.compatGetField(this, "_sourceLike");
+    const source = this.#sourceLike;
     if (typeof source.updateHash === "function") {
       return source.updateHash(hash);
     }
