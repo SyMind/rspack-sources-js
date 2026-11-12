@@ -1,5 +1,5 @@
 use crate::source_binding::{NativeBinding, attach, source_of};
-use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
+use crate::{source_binding::buffer_owner_of, source_buffer::SourceBuffer};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{CachedSource, SourceExt, SourceRef};
@@ -21,15 +21,15 @@ pub fn cached_new(receiver: Object<'_>, original: Object<'_>) -> Result<()> {
 }
 
 #[napi(catch_unwind)]
-pub fn cached_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
-    Ok(OutputBuffer::source(
+pub fn cached_source(receiver: Object<'_>) -> Result<Either<String, SourceBuffer>> {
+    Ok(SourceBuffer::source(
         &buffer_owner_of::<CachedSourceBinding>(receiver)?,
     ))
 }
 
 #[napi(catch_unwind)]
-pub fn cached_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
-    Ok(OutputBuffer::buffer(
+pub fn cached_buffer(receiver: Object<'_>) -> Result<SourceBuffer> {
+    Ok(SourceBuffer::buffer(
         &buffer_owner_of::<CachedSourceBinding>(receiver)?,
     ))
 }

@@ -3,7 +3,7 @@ use crate::{
     invalid,
     source_binding::{NativeBinding, attach, binding_of, edit, require, source_of},
 };
-use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
+use crate::{source_binding::buffer_owner_of, source_buffer::SourceBuffer};
 use napi::{Env, Result, ValueType, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{ConcatSource, RawStringSource, SourceExt, SourceRef};
@@ -96,15 +96,15 @@ pub fn concat_add_all_skip_optimizing(receiver: Object<'_>, items: Vec<Unknown<'
 }
 
 #[napi(catch_unwind)]
-pub fn concat_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
-    Ok(OutputBuffer::source(
+pub fn concat_source(receiver: Object<'_>) -> Result<Either<String, SourceBuffer>> {
+    Ok(SourceBuffer::source(
         &buffer_owner_of::<ConcatSourceBinding>(receiver)?,
     ))
 }
 
 #[napi(catch_unwind)]
-pub fn concat_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
-    Ok(OutputBuffer::buffer(
+pub fn concat_buffer(receiver: Object<'_>) -> Result<SourceBuffer> {
+    Ok(SourceBuffer::buffer(
         &buffer_owner_of::<ConcatSourceBinding>(receiver)?,
     ))
 }

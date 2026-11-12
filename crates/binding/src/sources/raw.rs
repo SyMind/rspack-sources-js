@@ -1,5 +1,5 @@
 use crate::source_binding::{NativeBinding, attach, source_of};
-use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
+use crate::{source_binding::buffer_owner_of, source_buffer::SourceBuffer};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{RawBufferSource, SourceRef};
@@ -29,15 +29,15 @@ pub fn raw_is_buffer(receiver: Object<'_>) -> Result<bool> {
 }
 
 #[napi]
-pub fn raw_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
-    Ok(OutputBuffer::source(&buffer_owner_of::<RawSourceBinding>(
+pub fn raw_source(receiver: Object<'_>) -> Result<Either<String, SourceBuffer>> {
+    Ok(SourceBuffer::source(&buffer_owner_of::<RawSourceBinding>(
         receiver,
     )?))
 }
 
 #[napi]
-pub fn raw_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
-    Ok(OutputBuffer::buffer(&buffer_owner_of::<RawSourceBinding>(
+pub fn raw_buffer(receiver: Object<'_>) -> Result<SourceBuffer> {
+    Ok(SourceBuffer::buffer(&buffer_owner_of::<RawSourceBinding>(
         receiver,
     )?))
 }

@@ -1,6 +1,6 @@
 use crate::source_binding::binding_of;
 use crate::sources::{SourceAndMap, source_and_map, source_map};
-use crate::{invalid, output_buffer::OutputBuffer};
+use crate::{invalid, source_buffer::SourceBuffer};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::SourceRef;
@@ -37,13 +37,13 @@ pub struct NativeSource {
 #[napi]
 impl NativeSource {
     #[napi(catch_unwind)]
-    pub fn source(&self) -> Either<String, OutputBuffer> {
-        OutputBuffer::source(&self.source)
+    pub fn source(&self) -> Either<String, SourceBuffer> {
+        SourceBuffer::source(&self.source)
     }
 
     #[napi(catch_unwind)]
-    pub fn buffer(&self) -> OutputBuffer {
-        OutputBuffer::buffer(&self.source)
+    pub fn buffer(&self) -> SourceBuffer {
+        SourceBuffer::buffer(&self.source)
     }
 
     #[napi(catch_unwind)]

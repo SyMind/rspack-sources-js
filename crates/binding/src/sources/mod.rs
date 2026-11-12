@@ -8,7 +8,7 @@ pub mod replace;
 pub mod size_only;
 pub mod source_map;
 
-use crate::{invalid, maps::parse_map, output_buffer::OutputBuffer, source_binding::binding_of};
+use crate::{invalid, maps::parse_map, source_binding::binding_of, source_buffer::SourceBuffer};
 use napi::{Result, ValueType, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{
@@ -80,7 +80,7 @@ pub(crate) fn bound_input(value: Unknown<'_>) -> Result<SourceRef> {
 
 #[napi(object, object_from_js = false)]
 pub struct SourceAndMap {
-    pub source: Either<String, OutputBuffer>,
+    pub source: Either<String, SourceBuffer>,
     pub map: Value,
 }
 
@@ -90,7 +90,7 @@ pub(crate) fn source_map(source: &dyn Source, columns: bool) -> Result<Value> {
 
 pub(crate) fn source_and_map(source: &Arc<SourceRef>, columns: bool) -> Result<SourceAndMap> {
     Ok(SourceAndMap {
-        source: OutputBuffer::source(source),
+        source: SourceBuffer::source(source),
         map: source_map(source.as_ref().as_ref(), columns)?,
     })
 }

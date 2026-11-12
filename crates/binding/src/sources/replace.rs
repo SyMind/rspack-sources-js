@@ -1,6 +1,6 @@
 use crate::source_binding::{NativeBinding, attach, edit, require, source_of};
 use crate::{diagnostics::STATS, invalid, positions::ByteOffsets};
-use crate::{output_buffer::OutputBuffer, source_binding::buffer_owner_of};
+use crate::{source_binding::buffer_owner_of, source_buffer::SourceBuffer};
 use napi::{Result, bindgen_prelude::*};
 use napi_derive::napi;
 use rspack_sources::{ReplaceSource, SourceExt, SourceRef};
@@ -129,15 +129,15 @@ pub fn replace_get_replacements<'env>(
 }
 
 #[napi(catch_unwind)]
-pub fn replace_source(receiver: Object<'_>) -> Result<Either<String, OutputBuffer>> {
-    Ok(OutputBuffer::source(&buffer_owner_of::<
+pub fn replace_source(receiver: Object<'_>) -> Result<Either<String, SourceBuffer>> {
+    Ok(SourceBuffer::source(&buffer_owner_of::<
         ReplaceSourceBinding,
     >(receiver)?))
 }
 
 #[napi(catch_unwind)]
-pub fn replace_buffer(receiver: Object<'_>) -> Result<OutputBuffer> {
-    Ok(OutputBuffer::buffer(&buffer_owner_of::<
+pub fn replace_buffer(receiver: Object<'_>) -> Result<SourceBuffer> {
+    Ok(SourceBuffer::buffer(&buffer_owner_of::<
         ReplaceSourceBinding,
     >(receiver)?))
 }

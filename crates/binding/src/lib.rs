@@ -1,8 +1,8 @@
 pub mod diagnostics;
 mod maps;
-mod output_buffer;
 mod positions;
 mod source_binding;
+mod source_buffer;
 pub mod sources;
 
 pub(crate) fn invalid(message: &str) -> napi::Error {

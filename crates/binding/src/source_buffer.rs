@@ -6,7 +6,7 @@ use std::{borrow::Cow, ffi::c_void, ptr, sync::Arc};
 use napi::{Result, bindgen_prelude::*, check_status, sys};
 use rspack_sources::{SourceRef, SourceValue};
 
-pub struct OutputBuffer(Storage);
+pub struct SourceBuffer(Storage);
 
 enum Storage {
     Owned(Vec<u8>),
@@ -17,7 +17,7 @@ enum Storage {
     },
 }
 
-impl OutputBuffer {
+impl SourceBuffer {
     pub(crate) fn owned(bytes: Vec<u8>) -> Self {
         Self(Storage::Owned(bytes))
     }
@@ -60,7 +60,7 @@ unsafe extern "C" fn release_owner(_: sys::napi_env, _: *mut c_void, hint: *mut 
     drop(unsafe { Arc::from_raw(hint.cast::<SourceRef>()) });
 }
 
-impl ToNapiValue for OutputBuffer {
+impl ToNapiValue for SourceBuffer {
     unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> Result<sys::napi_value> {
         let (data, len, owner) = match value.0 {
             Storage::Owned(bytes) => return unsafe { Buffer::to_napi_value(env, bytes.into()) },
